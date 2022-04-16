@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+# third party deps
+third_party
+
+#cmake
+cmake
