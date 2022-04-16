@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.5.1)
 
 project(BlockStorage C CXX)
-
+add_subdirectory(third_party/leveldb)
+add_executable(runscript util/levelDBWrapper.cc)
+target_link_libraries(runscript PUBLIC leveldb)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../common.cmake)
 
 # Proto files
