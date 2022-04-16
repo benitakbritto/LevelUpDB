@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package blockstorage;
 
+// TODO: Update as required
 service LBNodeComm {
     rpc SendHeartBeat(stream HeartBeatRequest) returns (stream HeartBeatReply) {}
 }
