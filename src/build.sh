@@ -22,8 +22,4 @@ make clean
 echo "${BLUE} Compiling ${NOCOLOR}"
 make -j 4	
 
-echo "${BLUE} Compiling CRC ${NOCOLOR}"
-cd ../..
-g++ -o crc.o crc.cc
-
 echo "${BLUE} Done ${NOCOLOR}"
