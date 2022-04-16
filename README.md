@@ -1,4 +1,4 @@
-# CS-739-P4
+# CS-739-P4: LevelUpDB - A Cloud-Native version of LevelDB
 
 ## Rubric
 <TODO>
