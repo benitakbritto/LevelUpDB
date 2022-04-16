@@ -12,14 +12,14 @@ for example, instead of `make -j` use `make -j 4`
 
 ### Build
 #### Main source code
-0. cd src/
-1. chmod 755 build.sh
-2. ./build.sh
+0. `cd src/`
+1. `chmod 755 build.sh`
+2. `./build.sh`
 
 #### Performance scripts
-0. cd performance/
-1. chmod 755 build.sh
-2. ./build.sh
+0. `cd performance/`
+1. `chmod 755 build.sh`
+2. `./build.sh`
 
 ### Run
 <TODO>
