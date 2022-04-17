@@ -151,27 +151,28 @@ endforeach()
 
 
 # Server
-# foreach(_target
-#   blockstorage_server )
-#   add_library(atl "util/address_translation.cc")
-#   add_library(wal "util/wal.cc")
-#   add_library(txn "util/txn.cc")
-#   add_library(kv "util/kv_store.cc")
-#   add_library(locks "util/locks.cc")
-#   add_library(cacheUtil "util/cache.cc")
-#   add_executable(${_target} "${_target}.cc")
-#   target_link_libraries(${_target}
-#     atl
-#     wal
-#     txn
-#     kv
-#     cr
-#     locks
-#     cacheUtil
-#     hw_grpc_proto
-#     comm_grpc_proto
-#     lb_grpc_proto
-#     ${_REFLECTION}
-#     ${_GRPC_GRPCPP}
-#     ${_PROTOBUF_LIBPROTOBUF})
-# endforeach()
+foreach(_target
+  server )
+#  add_library(atl "util/address_translation.cc")
+#  add_library(wal "util/wal.cc")
+#  add_library(txn "util/txn.cc")
+#  add_library(kv "util/kv_store.cc")
+  add_library(locks "util/locks.cc")
+#  add_library(cacheUtil "util/cache.cc")
+  add_executable(${_target} "./server/${_target}.cc")
+  target_link_libraries(${_target}
+#    atl
+#    wal
+#    txn
+#    kv
+#    cr
+    locks
+#    cacheUtil
+#  hw_grpc_proto
+    comm_grpc_proto
+    lb_grpc_proto
+    raft_grpc_proto
+    ${_REFLECTION}
+    ${_GRPC_GRPCPP}
+    ${_PROTOBUF_LIBPROTOBUF})
+endforeach()
