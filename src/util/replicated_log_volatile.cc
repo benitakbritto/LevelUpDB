@@ -118,3 +118,14 @@ int VolatileReplicatedLog::GetLength()
 {
     return volatile_replicated_log.size();
 }
+
+/*
+*   @brief Prints all the contents in the volatile log 
+*/
+void VolatileReplicatedLog::PrintVolatileLog()
+{
+    for (auto entry : volatile_replicated_log)
+    {
+        dbgprintf("%d | %s | %s | %d\n", entry.term, entry.key.c_str(), entry.value.c_str(), entry.file_offset);
+    }
+}

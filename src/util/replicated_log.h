@@ -1,3 +1,9 @@
+/*
+*   Log Format:
+*   <term>,<key>,<value>,<offset at which this entry exist in file>
+*
+*/
+
 #ifndef REPLICATED_LOG_H
 #define REPLICATED_LOG_H
 

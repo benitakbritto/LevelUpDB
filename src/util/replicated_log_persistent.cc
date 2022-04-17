@@ -42,11 +42,12 @@ void PersistentReplicatedLog::GoToEndOfFile()
 *   @param term 
 *   @param key 
 *   @param value 
+*   @param offset 
 *   @return command entry string
 */
-string PersistentReplicatedLog::CreateLogEntry(int term, string key, string value)
+string PersistentReplicatedLog::CreateLogEntry(int term, string key, string value, int offset)
 {
-    return to_string(term) + DELIM + key + DELIM + value +  "\n";
+    return to_string(term) + DELIM + key + DELIM + value + DELIM + to_string(offset) + "\n";
 }
 
 /*
@@ -64,7 +65,7 @@ void PersistentReplicatedLog::WriteToLog(int term, string key, string value, int
     string log_entry = "";
     int res = 0;
 
-    log_entry = CreateLogEntry(term, key, value);
+    log_entry = CreateLogEntry(term, key, value, offset);
     res = pwrite(fd, log_entry.c_str(), log_entry.size(), offset);
     lseek(fd, res, SEEK_CUR); // move bytes written ahead
     
@@ -151,4 +152,62 @@ int PersistentReplicatedLog::GetEndOfFileOffset()
 int PersistentReplicatedLog::GetCurrentFileOffset()
 {
     return lseek(fd, 0, SEEK_CUR);
+}
+
+/*
+*   @brief Get all the entries in the log
+*/
+vector<PLogEntry> PersistentReplicatedLog::ParseLog()
+{
+    dbgprintf("[DEBUG]: ParseLog - Entering function\n");
+    vector<PLogEntry> ret;
+    ifstream file(REPLICATED_LOG_PATH);
+
+    if (file.is_open())
+    {
+        string line;
+        while (getline(file, line))
+        {
+            int term_start = 0;
+            int term_end = 0;
+            int key_start = 0;
+            int key_end = 0;
+            int value_start = 0;
+            int value_end = 0;
+            int term = 0;
+            string key = "";
+            string value = "";
+            int offset_start = 0;
+            int offset_end = 0;
+            int offset;
+
+            // get term
+            term_end = line.find(DELIM);
+            term = atoi(line.substr(term_start, term_end).c_str());
+            dbgprintf("[DEBUG] term = %d\n", term);
+
+            // get key
+            key_start = term_end + 1;
+            key_end = line.find(DELIM, key_start);
+            key = line.substr(key_start, key_end - term_end - 1);
+            dbgprintf("[DEBUG] key = %s\n", key.c_str());
+
+            // get value
+            value_start = key_end + 1;
+            value_end = line.find(DELIM, value_start);
+            value = line.substr(value_start, value_end - key_end - 1);
+            dbgprintf("[DEBUG] value = %s\n", value.c_str());
+
+            // get offset
+            offset_start = value_end + 1;
+            offset_end = line.find(DELIM, offset_start);
+            offset = atoi(line.substr(offset_start, offset_end - value_end - 1).c_str());
+            dbgprintf("[DEBUG] offset = %d\n", offset);
+
+            ret.push_back(PLogEntry(term, key, value, offset));
+        }
+    }
+
+    dbgprintf("[DEBUG]: ParseLog - Exiting function\n");
+    return ret;
 }

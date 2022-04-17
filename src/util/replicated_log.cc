@@ -74,6 +74,19 @@ int ReplicatedLogHelper::GetTermAtIndex(int index)
     return vObj.GetTerm(index);
 }
 
+// TODO
+void ReplicatedLogHelper::Init()
+{
+    auto entries = pObj.ParseLog();
+
+    for (auto entry : entries)
+    {
+        vObj.Append(entry.term, entry.key, entry.value, entry.offset); // TODO: Offsets
+    }
+
+    // remove later
+    vObj.PrintVolatileLog();
+}
 
 /*
 *   @brief Tester - Uncomment to test individually
@@ -83,26 +96,29 @@ int ReplicatedLogHelper::GetTermAtIndex(int index)
 // {
 //     ReplicatedLogHelper obj;
 
-//     // Test Append
-//     obj.Append(1, "key1", "value");
-//     dbgprintf("Log length = %d\n", obj.GetLogLength());
+//     // // Test Append
+//     // obj.Append(1, "key1", "value");
+//     // dbgprintf("Log length = %d\n", obj.GetLogLength());
 
-//     obj.Append(2, "key2", "value");
-//     dbgprintf("Log length = %d\n", obj.GetLogLength());
+//     // obj.Append(2, "key2", "value");
+//     // dbgprintf("Log length = %d\n", obj.GetLogLength());
 
-//     obj.Append(3, "key3", "value");
-//     dbgprintf("Log length = %d\n", obj.GetLogLength());
+//     // obj.Append(3, "key3", "value");
+//     // dbgprintf("Log length = %d\n", obj.GetLogLength());
 
-//     // Test Insert
-//     vector<Entry> entries;
-//     entries.push_back(Entry(1, "a", "d"));
-//     entries.push_back(Entry(2, "b", "e"));
-//     obj.Insert(1, entries);
-//     dbgprintf("Log length = %d\n", obj.GetLogLength());
+//     // // Test Insert
+//     // vector<Entry> entries;
+//     // entries.push_back(Entry(1, "a", "d"));
+//     // entries.push_back(Entry(2, "b", "e"));
+//     // obj.Insert(1, entries);
+//     // dbgprintf("Log length = %d\n", obj.GetLogLength());
 
-//     // Test Get term
-//     dbgprintf("Term at index %d is %d\n", 1, obj.GetTermAtIndex(1));
-//     dbgprintf("Term at index %d is %d\n", 2, obj.GetTermAtIndex(2));
+//     // // Test Get term
+//     // dbgprintf("Term at index %d is %d\n", 1, obj.GetTermAtIndex(1));
+//     // dbgprintf("Term at index %d is %d\n", 2, obj.GetTermAtIndex(2));
+
+//     // Test Init
+//     obj.Init();
 
 
 //     return 0;

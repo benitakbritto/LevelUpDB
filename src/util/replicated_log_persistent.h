@@ -6,11 +6,27 @@
 #include <errno.h>
 #include <unistd.h>
 #include <cstring>
+#include <fstream>
+#include <vector>
 
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
+struct PersistentLogEntry
+{
+    int term;
+    string key;
+    string value;
+    int offset;
+    PersistentLogEntry(int term, string key, string value, int offset) :
+                        term(term),
+                        key(key),
+                        value(value),
+                        offset(offset)
+                        {}
+};
 
+typedef PersistentLogEntry PLogEntry;
 
 /******************************************************************************
  * MACROS
@@ -30,7 +46,7 @@ class PersistentReplicatedLog
 {
 private:
     int fd;
-    string CreateLogEntry(int term, string key, string value);
+    string CreateLogEntry(int term, string key, string value, int offset);
     
     void GoToOffset(int offset);
     void GoToEndOfFile();
@@ -43,6 +59,7 @@ public:
     void Append(int term, string key, string value, int offset);
     int GetEndOfFileOffset();
     int GetCurrentFileOffset();
+    vector<PLogEntry> ParseLog();
 };
 
 
