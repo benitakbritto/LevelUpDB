@@ -4,9 +4,9 @@ package blockstorage;
 
 service Raft
 {
-    rpc ReqVote(ReqVoteRequest) returns (ReqVoteRequest) {}
-    rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesRequest) {}
-    rpc AssertLeadership(AssertLeadershipRequest) returns (AssertLeadershipResponse) {}
+    rpc ReqVote(ReqVoteRequest) returns (ReqVoteReply) {}
+    rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesReply) {}
+    rpc AssertLeadership(AssertLeadershipRequest) returns (AssertLeadershipReply) {}
 }
 
 message ReqVoteRequest {
@@ -16,7 +16,7 @@ message ReqVoteRequest {
     uint32 lastLogTerm = 4;
 }
 
-message ReqVoteResponse {
+message ReqVoteReply {
     uint32 term = 1;
     bool voteGrantedFor = 2;
 }
@@ -35,7 +35,7 @@ message LogEntry {
     string value = 3;
 }
 
-message AppendEntriesResponse {
+message AppendEntriesReply {
     uint32 term = 1;
     bool success = 2;
 }
@@ -44,7 +44,7 @@ message AssertLeadershipRequest {
     string leaderID = 1;
 }
 
-message AssertLeadershipResponse {
+message AssertLeadershipReply {
     SystemState systemState = 1;
 }
 

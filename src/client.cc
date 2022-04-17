@@ -1,0 +1,35 @@
+#include<errno.h>
+#include "client.h"
+#include <unistd.h>
+
+Status P4Client::GetFromDB(const GetRequest request, GetReply* reply) 
+{
+    int attempt = 0;
+    Status status;
+
+    do {
+        reply->Clear();
+        ClientContext context;
+        status = stub_->GetFromDB(&context, request, reply);    
+        attempt++;
+    } while(attempt < 3 && status.error_code() != grpc::StatusCode::OK);
+
+    return status;
+}
+
+Status P4Client::PutToDB(PutRequest request, PutReply* reply)
+{
+    Status status;
+    int attempt = 0;
+    int backoff = 2;
+
+    do {
+        sleep(attempt * backoff);
+        // PutReply reply;
+        ClientContext context;
+        status = stub_->PutToDB(&context, request, reply);
+        attempt++;
+    } while(attempt < 3 && status.error_code() != grpc::StatusCode::OK);
+
+    return status;
+}
