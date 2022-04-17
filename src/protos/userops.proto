@@ -4,15 +4,15 @@ package blockstorage;
 
 service UserOps
 {
-    rpc GetFromDB(GetRequest) returns (GetResponse) {}
-    rpc PutToDB(PutRequest) returns (PutResponse) {}
+    rpc GetFromDB(GetRequest) returns (GetReply) {}
+    rpc PutToDB(PutRequest) returns (PutReply) {}
 }
 
 message GetRequest {
     string key = 1;
 }
 
-message GetResponse {
+message GetReply {
     string value = 1;
 }
 
@@ -21,5 +21,5 @@ message PutRequest {
     string value = 2;
 }
 
-message PutResponse {
+message PutReply {
 }
