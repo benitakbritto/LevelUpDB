@@ -1,21 +1,39 @@
-#ifndef PERSISTENT_REPLICATED_LOG_H
-#define PERSISTENT_REPLICATED_LOG_H
+/*
+*   Log Format:
+*   <term>,<key>,<value>,<offset at which this entry exist in file>
+*
+*/
+
+#ifndef REPLICATED_LOG_H
+#define REPLICATED_LOG_H
 
 #include "common.h"
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
 #include <cstring>
+#include <vector>
+#include "replicated_log_persistent.h"
+#include "replicated_log_volatile.h"
 
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
+struct ReplicatedLogEntry
+{
+    int term;
+    string key;
+    string value;
+    ReplicatedLogEntry(int term, string key, string value)
+            : term(term), key(key), value(value) {}
+};
 
+typedef ReplicatedLogEntry Entry;
 
 /******************************************************************************
  * MACROS
  *****************************************************************************/
-#define DELIM                       ","
+
 
 /******************************************************************************
  * NAMESPACES
@@ -26,23 +44,25 @@
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
-class PersistentReplicatedLog
+class ReplicatedLogHelper
 {
 private:
-    int fd;
-    string CreateLogEntry(int term, string key, string value);
+    PersistentReplicatedLog pObj;
+    VolatileReplicatedLog vObj;
     
-    void GoToOffset(int offset);
-    void GoToEndOfFile();
-    void WriteToLog(int term, string key, string value, int offset);
-
 public:
-    PersistentReplicatedLog();
-    
-    void Insert(int offset, int term, string key, string value);
-    void Append(int term, string key, string value, int offset);
-    int GetEndOfFileOffset();
-    int GetCurrentFileOffset();
+    ReplicatedLogHelper() {}
+
+    // Setter
+    void Append(int term, string key, string value);
+    void Insert(int start_index, vector<Entry> &entries);
+
+    // Getter
+    int GetLogLength();
+    int GetTermAtIndex(int index);
+
+    // On Boot
+    void Init();
 };
 
 

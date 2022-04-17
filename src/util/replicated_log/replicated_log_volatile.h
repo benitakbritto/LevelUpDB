@@ -61,6 +61,8 @@ public:
     int GetTerm(int index);
     string GetKey(int index);
     string GetValue(int index);
+    int GetLength();
+    void PrintVolatileLog(); // for debug
 };
 
 
