@@ -27,14 +27,14 @@ using blockstorage::UserOps;
 
 using namespace std;
 
-class P4Client  
+class KeyValueClient  
 {
 
 private:
     unique_ptr<UserOps::Stub> stub_;
     
 public:
-    P4Client(std::shared_ptr<Channel> channel)
+    KeyValueClient(std::shared_ptr<Channel> channel)
       : stub_(UserOps::NewStub(channel)) {}
     
     // void Connect(string target);

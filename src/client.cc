@@ -2,7 +2,7 @@
 #include "client.h"
 #include <unistd.h>
 
-Status P4Client::GetFromDB(const GetRequest request, GetReply* reply) 
+Status KeyValueClient::GetFromDB(const GetRequest request, GetReply* reply) 
 {
     int attempt = 0;
     Status status;
@@ -17,7 +17,7 @@ Status P4Client::GetFromDB(const GetRequest request, GetReply* reply)
     return status;
 }
 
-Status P4Client::PutToDB(PutRequest request, PutReply* reply)
+Status KeyValueClient::PutToDB(PutRequest request, PutReply* reply)
 {
     Status status;
     int attempt = 0;
