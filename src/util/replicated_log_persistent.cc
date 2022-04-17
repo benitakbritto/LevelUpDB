@@ -9,7 +9,7 @@
 PersistentReplicatedLog::PersistentReplicatedLog()
 {
     string log_file_path = REPLICATED_LOG_PATH;
-    fd = open(log_file_path.c_str(), O_WRONLY | O_APPEND | O_CREAT, 0666);
+    fd = open(log_file_path.c_str(), O_WRONLY | O_CREAT, 0666);
 
     if (fd == -1) 
     {
@@ -26,10 +26,14 @@ PersistentReplicatedLog::PersistentReplicatedLog()
 */
 void PersistentReplicatedLog::GoToEndOfFile()
 {
+    dbgprintf("[DEBUG]: GoToEndOfFile - Entering function\n");
+
     if (lseek(fd, 0, SEEK_END) == -1)
     {
         throw runtime_error("[ERROR]: lseek() failed");
     }
+
+    dbgprintf("[DEBUG]: GoToEndOfFile - Exiting function\n");
 }
 
 /*
@@ -45,11 +49,25 @@ string PersistentReplicatedLog::CreateLogEntry(int term, string key, string valu
     return to_string(term) + DELIM + key + DELIM + value +  "\n";
 }
 
-void PersistentReplicatedLog::WriteToLog(int term, string key, string value)
+/*
+*   @brief Write entry to log
+*
+*   @param term 
+*   @param key 
+*   @param value 
+*   @param offset 
+*/
+void PersistentReplicatedLog::WriteToLog(int term, string key, string value, int offset)
 {
+    dbgprintf("[DEBUG]: WriteToLog - Entering function\n");
+
     string log_entry = "";
+    int res = 0;
+
     log_entry = CreateLogEntry(term, key, value);
-    int res = write(fd, log_entry.c_str(), log_entry.size());
+    res = pwrite(fd, log_entry.c_str(), log_entry.size(), offset);
+    lseek(fd, res, SEEK_CUR); // move bytes written ahead
+    
     if (res == -1) 
     {
         dbgprintf("[ERROR]: WriteToLog - failed to write %s\n", log_entry.c_str());
@@ -59,6 +77,8 @@ void PersistentReplicatedLog::WriteToLog(int term, string key, string value)
     {
         fsync(fd);
     }
+
+    dbgprintf("[DEBUG]: WriteToLog - Exiting function\n");
 }
 
 /*
@@ -67,43 +87,68 @@ void PersistentReplicatedLog::WriteToLog(int term, string key, string value)
 *   @param term 
 *   @param key 
 *   @param value 
+*   @param offset
 */
-void PersistentReplicatedLog::Append(int term, string key, string value)
+void PersistentReplicatedLog::Append(int term, string key, string value, int offset)
 {
-    dbgprintf("[DEBUG]: Append - Entered function\n");
+    dbgprintf("[DEBUG]: Append - Entering function\n");
 
     GoToEndOfFile();
-    WriteToLog(term, key, value);
+    WriteToLog(term, key, value, offset);
 
     dbgprintf("[DEBUG]: Append - Exiting function\n");
 }
 
-// void PersistentReplicatedLog::Insert(int index, int term, string key, string value)
-// {
-//     int offset = 0;
+/*
+*   @brief Add command entry to log at specified offset
+*
+*   @param term 
+*   @param key 
+*   @param value 
+*/
+void PersistentReplicatedLog::Insert(int offset, int term, string key, string value)
+{
+    dbgprintf("[DEBUG]: Insert - Entering function\n");
 
-//     offset = volatileReplicatedLogObj.GetOffset(index);
-//     GoToOffset(offset);
+    GoToOffset(offset);
+    WriteToLog(term, key, value, offset);
 
-// }
+    dbgprintf("[DEBUG]: Insert - Exiting function\n");
+}
 
-
-
-// void PersistentReplicatedLog::SetEndOfFileOffset(int offset)
-// {
-//     lseek(fd, 0, SEEK_END);
-// }
-
+/*
+*   @brief Move file position to specified offset
+*
+*   @param offset 
+*/
 void PersistentReplicatedLog::GoToOffset(int offset)
 {
-    // offset from beginning of file
+    dbgprintf("[DEBUG]: GoToOffset - Entering function\n");
+
     if (lseek(fd, offset, SEEK_SET) == -1)
     {
         throw runtime_error("[ERROR]: lseek failed\n");
     }
+
+    dbgprintf("[DEBUG]: GoToOffset - Exiting function\n");
 }
 
+/*
+*   @brief Get the offset of the last byte
+*
+*   @return offset
+*/
 int PersistentReplicatedLog::GetEndOfFileOffset()
 {
     return lseek(fd, 0, SEEK_END);
+}
+
+/*
+*   @brief Get the current position of the file
+*
+*   @return offset 
+*/
+int PersistentReplicatedLog::GetCurrentFileOffset()
+{
+    return lseek(fd, 0, SEEK_CUR);
 }

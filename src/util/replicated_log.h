@@ -13,7 +13,16 @@
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
+struct ReplicatedLogEntry
+{
+    int term;
+    string key;
+    string value;
+    ReplicatedLogEntry(int term, string key, string value)
+            : term(term), key(key), value(value) {}
+};
 
+typedef ReplicatedLogEntry Entry;
 
 /******************************************************************************
  * MACROS
@@ -38,7 +47,7 @@ private:
 public:
     ReplicatedLogHelper() {}
     void Append(int term, string key, string value);
-    void Insert(int index, int term, string key, string value);
+    void Insert(int start_index, vector<Entry> &entries);
 };
 
 

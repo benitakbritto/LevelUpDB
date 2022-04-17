@@ -31,21 +31,18 @@ class PersistentReplicatedLog
 private:
     int fd;
     string CreateLogEntry(int term, string key, string value);
-    void SetEndOfFileOffset(int offset);
-    void GoToOffset(int offset);
     
+    void GoToOffset(int offset);
     void GoToEndOfFile();
-    void WriteToLog(int term, string key, string value);
-    int _endOfFileOffset = 0;
+    void WriteToLog(int term, string key, string value, int offset);
 
 public:
-    
-
-
     PersistentReplicatedLog();
-    void Insert(int term, string key, string value);
-    void Append(int term, string key, string value);
+    
+    void Insert(int offset, int term, string key, string value);
+    void Append(int term, string key, string value, int offset);
     int GetEndOfFileOffset();
+    int GetCurrentFileOffset();
 };
 
 
