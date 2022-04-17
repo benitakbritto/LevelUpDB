@@ -8,8 +8,8 @@ service LBNodeComm {
 }
 
 enum Identity {
-    PRIMARY = 0;
-    BACKUP = 1;
+    LEADER = 0;
+    FOLLOWER = 1;
 }
 
 message HeartBeatRequest {
@@ -18,5 +18,9 @@ message HeartBeatRequest {
 }
 
 message HeartBeatReply {
-    optional string peer_ip = 1;
+    repeated FollowerID followerID = 1;
+}
+
+message FollowerID {
+    string id = 1;
 }

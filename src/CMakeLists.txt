@@ -17,7 +17,7 @@ get_filename_component(lb_proto "../src/protos/lb.proto" ABSOLUTE)
 get_filename_component(lb_proto_path "${lb_proto}" PATH)
 
 # Proto file 3
-get_filename_component(lb_proto "../src/protos/raft.proto" ABSOLUTE)
+get_filename_component(raft_proto "../src/protos/raft.proto" ABSOLUTE)
 get_filename_component(raft_proto_path "${raft_proto}" PATH)
 
 # Generated sources
@@ -97,7 +97,7 @@ add_library(raft_grpc_proto
   ${raft_grpc_hdrs}
   ${raft_proto_srcs}
   ${raft_proto_hdrs})
-target_link_libraries(lb_grpc_proto
+target_link_libraries(raft_grpc_proto
   ${_REFLECTION}
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
