@@ -1,11 +1,14 @@
-#ifndef PERSISTENT_REPLICATED_LOG_H
-#define PERSISTENT_REPLICATED_LOG_H
+#ifndef REPLICATED_LOG_H
+#define REPLICATED_LOG_H
 
 #include "common.h"
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
 #include <cstring>
+#include <vector>
+#include "replicated_log_persistent.h"
+#include "replicated_log_volatile.h"
 
 /******************************************************************************
  * GLOBALS
@@ -15,7 +18,7 @@
 /******************************************************************************
  * MACROS
  *****************************************************************************/
-#define DELIM                       ","
+
 
 /******************************************************************************
  * NAMESPACES
@@ -26,26 +29,16 @@
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
-class PersistentReplicatedLog
+class ReplicatedLogHelper
 {
 private:
-    int fd;
-    string CreateLogEntry(int term, string key, string value);
-    void SetEndOfFileOffset(int offset);
-    void GoToOffset(int offset);
+    PersistentReplicatedLog pObj;
+    VolatileReplicatedLog vObj;
     
-    void GoToEndOfFile();
-    void WriteToLog(int term, string key, string value);
-    int _endOfFileOffset = 0;
-
 public:
-    
-
-
-    PersistentReplicatedLog();
-    void Insert(int term, string key, string value);
+    ReplicatedLogHelper() {}
     void Append(int term, string key, string value);
-    int GetEndOfFileOffset();
+    void Insert(int index, int term, string key, string value);
 };
 
 
