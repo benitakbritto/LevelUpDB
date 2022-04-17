@@ -50,27 +50,60 @@ void ReplicatedLogHelper::Insert(int start_index, vector<Entry> &entries)
         vObj.Insert(index, val.term, val.key, val.value, offset);
         
         offset = pObj.GetCurrentFileOffset();
+        index += 1;
     }
 
     dbgprintf("[DEBUG]: Insert - Exiting function\n");
 }
 
 /*
+*   @brief Get the number of total entries in the log
+*/
+int ReplicatedLogHelper::GetLogLength()
+{
+    return vObj.GetLength();
+}
+
+/*
+*   @brief Get the term number at the specified index
+*
+*   @param index
+*/
+int ReplicatedLogHelper::GetTermAtIndex(int index)
+{
+    return vObj.GetTerm(index);
+}
+
+
+/*
 *   @brief Tester - Uncomment to test individually
 *   @usage g++ replicated_log.cc replicated_log_persistent.cc replicated_log_volatile.cc -Wall -o log && ./log
 */
-int main()
-{
-    ReplicatedLogHelper obj;
-    obj.Append(1, "key1", "value");
-    obj.Append(2, "key2", "value");
-    obj.Append(3, "key3", "value");
+// int main()
+// {
+//     ReplicatedLogHelper obj;
 
-    vector<Entry> entries;
-    entries.push_back(Entry(1, "a", "d"));
-    entries.push_back(Entry(2, "b", "e"));
-    entries.push_back(Entry(3, "c", "f"));
-    obj.Insert(1, entries);
-    
-    return 0;
-}
+//     // Test Append
+//     obj.Append(1, "key1", "value");
+//     dbgprintf("Log length = %d\n", obj.GetLogLength());
+
+//     obj.Append(2, "key2", "value");
+//     dbgprintf("Log length = %d\n", obj.GetLogLength());
+
+//     obj.Append(3, "key3", "value");
+//     dbgprintf("Log length = %d\n", obj.GetLogLength());
+
+//     // Test Insert
+//     vector<Entry> entries;
+//     entries.push_back(Entry(1, "a", "d"));
+//     entries.push_back(Entry(2, "b", "e"));
+//     obj.Insert(1, entries);
+//     dbgprintf("Log length = %d\n", obj.GetLogLength());
+
+//     // Test Get term
+//     dbgprintf("Term at index %d is %d\n", 1, obj.GetTermAtIndex(1));
+//     dbgprintf("Term at index %d is %d\n", 2, obj.GetTermAtIndex(2));
+
+
+//     return 0;
+// }

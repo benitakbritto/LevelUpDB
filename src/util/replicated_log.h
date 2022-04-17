@@ -46,8 +46,17 @@ private:
     
 public:
     ReplicatedLogHelper() {}
+
+    // Setter
     void Append(int term, string key, string value);
     void Insert(int start_index, vector<Entry> &entries);
+
+    // Getter
+    int GetLogLength();
+    int GetTermAtIndex(int index);
+
+    // On Boot
+    void Init();
 };
 
 

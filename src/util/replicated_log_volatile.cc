@@ -31,8 +31,8 @@ void VolatileReplicatedLog::Append(int term, string key, string value, int file_
 void VolatileReplicatedLog::Insert(int index, int term, string key, string value, int file_offset)
 {
     dbgprintf("[DEBUG]: Insert - Entering function\n");
-
-    int len = volatile_replicated_log.size();
+    dbgprintf("[DEBUG]: Insert - index = %d\n", index);
+    int len = GetLength();
     if (index > len)
     {
         throw runtime_error("[ERROR]: Invalid index");
@@ -101,7 +101,7 @@ int VolatileReplicatedLog::GetTerm(int index)
 */
 bool VolatileReplicatedLog::isValidIndex(int index)
 {
-    int len = volatile_replicated_log.size();
+    int len = GetLength();
     if (len <= index)
     {
         throw runtime_error("[ERROR]: Invalid index");
@@ -109,4 +109,12 @@ bool VolatileReplicatedLog::isValidIndex(int index)
     }
 
     return true;
+}
+
+/*
+*   @brief Get total entries in log
+*/
+int VolatileReplicatedLog::GetLength()
+{
+    return volatile_replicated_log.size();
 }
