@@ -11,13 +11,13 @@
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
-struct ReplicatedLogEntry
+struct VolatileReplicatedLogEntry
 {
     int term;
     string key;
     string value;
     int file_offset;
-    ReplicatedLogEntry(int term,
+    VolatileReplicatedLogEntry(int term,
                     string key,
                     string value,
                     int file_offset)
@@ -29,7 +29,7 @@ struct ReplicatedLogEntry
                     {}                      
 };
 
-typedef ReplicatedLogEntry LogEntry;
+typedef VolatileReplicatedLogEntry LogEntry;
 
 /******************************************************************************
  * MACROS
@@ -50,9 +50,13 @@ class VolatileReplicatedLog
 private:
     vector<LogEntry> volatile_replicated_log;
 
+    bool isValidIndex(int index);
+
 public:
     VolatileReplicatedLog() {}
+    
     void Append(int term, string key, string value, int file_offset);
+    void Insert(int index, int term, string key, string value, int file_offset);
     int GetOffset(int index);
     int GetTerm(int index);
     string GetKey(int index);
