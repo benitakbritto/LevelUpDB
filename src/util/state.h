@@ -2,4 +2,4 @@ struct Follower {};
 struct Candidate {};
 struct Leader {};
 
-enum CurrentState { FOLLOWER = 0, CANDIDATE = 1, LEADER = 2};
+enum CurrentState { LEADER = 0, FOLLOWER = 1, CANDIDATE = 2};

@@ -11,7 +11,9 @@
 #define CRASH_TEST                  0
 #define crash()                     if (CRASH_TEST) { *((char*)0) = 0; }
 #define REPLICATED_LOG_PATH         "/home/benitakbritto/CS739-P4/storage/replicated_log"
-
+#define HB_SLEEP_IN_SEC             5
+#define LEADER_STR "LEADER"
+#define FOLLOWER_STR "FOLLOWER"
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/

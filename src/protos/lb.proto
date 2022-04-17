@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package blockstorage;
 
-// TODO: Update as required
 service LBNodeComm {
     rpc SendHeartBeat(stream HeartBeatRequest) returns (stream HeartBeatReply) {}
 }
@@ -18,9 +17,9 @@ message HeartBeatRequest {
 }
 
 message HeartBeatReply {
-    repeated FollowerID followerID = 1;
+    repeated FollowerIP followerIP = 1;
 }
 
-message FollowerID {
-    string id = 1;
+message FollowerIP {
+    string ip = 1;
 }
