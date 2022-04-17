@@ -36,3 +36,6 @@ third_party
 
 #cmake
 cmake
+
+# log files
+storage/replicated_log
