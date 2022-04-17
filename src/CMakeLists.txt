@@ -132,23 +132,22 @@ target_link_libraries(userops_grpc_proto
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
-# add_library(client_lib "client.cc")
-# target_link_libraries(client_lib 
-#   hw_grpc_proto
-# )
+add_library(client_lib "client.cc")
+target_link_libraries(client_lib 
+  userops_grpc_proto
+)
 
 # Client and LB
-# foreach(_target
-#   blockstorage_client load_balancer)
-#   add_executable(${_target} "${_target}.cc")
-#   target_link_libraries(${_target}
-#     hw_grpc_proto
-#     lb_grpc_proto
-#     client_lib
-#     ${_REFLECTION}
-#     ${_GRPC_GRPCPP}
-#     ${_PROTOBUF_LIBPROTOBUF})
-# endforeach()
+foreach(_target client )
+  add_executable(${_target} "${_target}.cc")
+  target_link_libraries(${_target}
+    userops_grpc_proto
+    lb_grpc_proto
+    client_lib
+    ${_REFLECTION}
+    ${_GRPC_GRPCPP}
+    ${_PROTOBUF_LIBPROTOBUF})
+endforeach()
 
 
 # Server
