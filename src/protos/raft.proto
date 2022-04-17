@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package blockstorage;
+
+service Raft
+{
+    rpc ReqVote(ReqVoteRequest) returns (ReqVoteRequest) {}
+    rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesRequest) {}
+    rpc AssertLeadership(AssertLeadershipRequest) returns (AssertLeadershipResponse) {}
+}
+
+message ReqVoteRequest {
+    uint32 term = 1;
+    string candidateID = 2;
+    uint32 lastLogIndex = 3;
+    uint32 lastLogTerm = 4;
+}
+
+message ReqVoteResponse {
+    uint32 term = 1;
+    bool voteGrantedFor = 2;
+}
+
+message AppendEntriesRequest {
+    uint32 term = 1;
+    string leaderID = 2;
+    uint32 prevLogIndex = 3;
+    uint32 prevLogTerm = 4;
+    repeated LogEntry logEntry = 5;
+}
+
+message LogEntry {
+    uint32 logIndex = 1;
+    string key = 2;
+    string value = 3;
+}
+
+message AppendEntriesResponse {
+    uint32 term = 1;
+    bool success = 2;
+}
+
+message AssertLeadershipRequest {
+    string leaderID = 1;
+}
+
+message AssertLeadershipResponse {
+    SystemState systemState = 1;
+}
+
+message SystemState {
+    repeated FollowerID followerID = 1;
+}
+
+message FollowerID {
+    string id = 1;
+}

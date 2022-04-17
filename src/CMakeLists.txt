@@ -7,12 +7,18 @@ target_link_libraries(runscript PUBLIC leveldb)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../common.cmake)
 
 # Proto files
+
 # Proto file 1
 get_filename_component(comm_proto "../src/protos/servercomm.proto" ABSOLUTE)
 get_filename_component(comm_proto_path "${comm_proto}" PATH)
+
 # Proto file 2
 get_filename_component(lb_proto "../src/protos/lb.proto" ABSOLUTE)
 get_filename_component(lb_proto_path "${lb_proto}" PATH)
+
+# Proto file 3
+get_filename_component(lb_proto "../src/protos/raft.proto" ABSOLUTE)
+get_filename_component(raft_proto_path "${raft_proto}" PATH)
 
 # Generated sources
 # Proto file 1
@@ -45,6 +51,21 @@ add_custom_command(
         "${lb_proto}"
       DEPENDS "${lb_proto}")
 
+# Proto file 3
+set(raft_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/raft.pb.cc")
+set(raft_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/raft.pb.h")
+set(raft_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/raft.grpc.pb.cc")
+set(raft_grpc_hdrs "${CMAKE_CURRENT_BINARY_DIR}/raft.grpc.pb.h")
+add_custom_command(
+      OUTPUT "${raft_proto_srcs}" "${raft_proto_hdrs}" "${raft_grpc_srcs}" "${raft_grpc_hdrs}"
+      COMMAND ${_PROTOBUF_PROTOC}
+      ARGS --grpc_out "${CMAKE_CURRENT_BINARY_DIR}"
+        --cpp_out "${CMAKE_CURRENT_BINARY_DIR}"
+        -I "${raft_proto_path}"
+        --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
+        "${raft_proto}"
+      DEPENDS "${raft_proto}")
+
 # Include generated *.pb.h files
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
@@ -70,6 +91,16 @@ target_link_libraries(lb_grpc_proto
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
+# Proto file 3
+add_library(raft_grpc_proto
+  ${raft_grpc_srcs}
+  ${raft_grpc_hdrs}
+  ${raft_proto_srcs}
+  ${raft_proto_hdrs})
+target_link_libraries(lb_grpc_proto
+  ${_REFLECTION}
+  ${_GRPC_GRPCPP}
+  ${_PROTOBUF_LIBPROTOBUF})
 
 # add_library(client_lib "client.cc")
 # target_link_libraries(client_lib 

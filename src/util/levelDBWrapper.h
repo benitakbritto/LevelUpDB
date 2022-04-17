@@ -3,7 +3,7 @@
 
 #include <cassert>
 #include <iostream>
-#include "leveldb/*"
+#include "leveldb/db.h"
 
 /******************************************************************************
  * NAMESPACES
