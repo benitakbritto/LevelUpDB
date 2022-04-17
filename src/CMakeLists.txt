@@ -20,6 +20,10 @@ get_filename_component(lb_proto_path "${lb_proto}" PATH)
 get_filename_component(raft_proto "../src/protos/raft.proto" ABSOLUTE)
 get_filename_component(raft_proto_path "${raft_proto}" PATH)
 
+# Proto file 4
+get_filename_component(userops_proto "../src/protos/userops.proto" ABSOLUTE)
+get_filename_component(userops_proto_path "${userops_proto}" PATH)
+
 # Generated sources
 # Proto file 1
 set(comm_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/servercomm.pb.cc")
@@ -66,6 +70,21 @@ add_custom_command(
         "${raft_proto}"
       DEPENDS "${raft_proto}")
 
+# Proto file 4
+set(userops_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/userops.pb.cc")
+set(userops_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/userops.pb.h")
+set(userops_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/userops.grpc.pb.cc")
+set(userops_grpc_hdrs "${CMAKE_CURRENT_BINARY_DIR}/userops.grpc.pb.h")
+add_custom_command(
+      OUTPUT "${userops_proto_srcs}" "${userops_proto_hdrs}" "${userops_grpc_srcs}" "${userops_grpc_hdrs}"
+      COMMAND ${_PROTOBUF_PROTOC}
+      ARGS --grpc_out "${CMAKE_CURRENT_BINARY_DIR}"
+        --cpp_out "${CMAKE_CURRENT_BINARY_DIR}"
+        -I "${userops_proto_path}"
+        --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
+        "${userops_proto}"
+      DEPENDS "${userops_proto}")
+
 # Include generated *.pb.h files
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
@@ -98,6 +117,17 @@ add_library(raft_grpc_proto
   ${raft_proto_srcs}
   ${raft_proto_hdrs})
 target_link_libraries(raft_grpc_proto
+  ${_REFLECTION}
+  ${_GRPC_GRPCPP}
+  ${_PROTOBUF_LIBPROTOBUF})
+
+# Proto file 4
+add_library(userops_grpc_proto
+  ${userops_grpc_srcs}
+  ${userops_grpc_hdrs}
+  ${userops_proto_srcs}
+  ${userops_proto_hdrs})
+target_link_libraries(userops_grpc_proto
   ${_REFLECTION}
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
