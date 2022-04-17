@@ -7,9 +7,9 @@
 #include "util/common.h"
 #include <grpcpp/grpcpp.h>
 #ifdef BAZEL_BUILD
-#include "examples/protos/userops.grpc.pb.h"
+#include "examples/protos/keyvalueops.grpc.pb.h"
 #else
-#include "userops.grpc.pb.h"
+#include "keyvalueops.grpc.pb.h"
 #endif
 
 /******************************************************************************
@@ -23,7 +23,7 @@ using blockstorage::PutRequest;
 using blockstorage::PutReply;
 using blockstorage::GetRequest;
 using blockstorage::GetReply;
-using blockstorage::UserOps;
+using blockstorage::KeyValueOps;
 
 using namespace std;
 
@@ -31,11 +31,11 @@ class KeyValueClient
 {
 
 private:
-    unique_ptr<UserOps::Stub> stub_;
+    unique_ptr<KeyValueOps::Stub> stub_;
     
 public:
     KeyValueClient(std::shared_ptr<Channel> channel)
-      : stub_(UserOps::NewStub(channel)) {}
+      : stub_(KeyValueOps::NewStub(channel)) {}
     
     // void Connect(string target);
     Status GetFromDB(GetRequest request, GetReply *reply);
