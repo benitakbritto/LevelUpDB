@@ -16,7 +16,7 @@ using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
-using grpc::ServerReaderWriter;
+using grpc::ServerReaderWriter; 
 using namespace blockstorage;
 using namespace std;
 
@@ -69,6 +69,7 @@ class KeyValueService final : public KeyValueOps::Service {
  * DECLARATION
  *****************************************************************************/
 class LBNodeCommService final: public LBNodeComm::Service {
+    
     private:
         map<string, string> nodes; //ip:identity map
         string leaderIP;
@@ -98,7 +99,6 @@ class LBNodeCommService final: public LBNodeComm::Service {
             HeartBeatRequest request;
             HeartBeatReply reply;
 
-            string prev_identity;
             string identity;
             string ip;
             bool first_time = true;
@@ -109,12 +109,12 @@ class LBNodeCommService final: public LBNodeComm::Service {
                     break;
                 }
                 dbgprintf("[INFO]: recv heartbeat from IP:[%s]\n", request.ip().c_str());
-
+                print_map();
                 identity = Identity_Name(request.identity());
                 ip = request.ip();
                 registerNode(identity, ip);
                 
-                if(identity.compare(LEADER_STR) == 0){
+                if(identity.compare(LEADER) == 0){
                     updateLeader(ip);
                 }
                 if(!stream->Write(reply)) {
@@ -124,7 +124,6 @@ class LBNodeCommService final: public LBNodeComm::Service {
             }
 
             cout << "[ERROR]: stream broke" << endl;
-            dbgprintf("[ERROR]: stream broke\n");
             eraseNode(ip);
 
             return Status::OK;
@@ -132,45 +131,36 @@ class LBNodeCommService final: public LBNodeComm::Service {
 };
 
 void* RunServerForClient(void* arg) {
-  int port = 50051;
-  std::string server_address("0.0.0.0:" + std::to_string(port));
-  KeyValueService service(live_servers, kv_clients);
+    string server_address("0.0.0.0:50051");
+    KeyValueService service(live_servers, kv_clients);
 
-  grpc::EnableDefaultHealthCheckService(true);
-  grpc::reflection::InitProtoReflectionServerBuilderPlugin();
-  ServerBuilder builder;
-  builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-  builder.RegisterService(&service);
-  std::unique_ptr<Server> server(builder.BuildAndStart());
-  std::cout << "Server for Client listening on " << server_address << std::endl;
+    grpc::EnableDefaultHealthCheckService(true);
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+    ServerBuilder builder;
+    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    builder.RegisterService(&service);
+    unique_ptr<Server> server(builder.BuildAndStart());
+    cout << "Server for Client listening on " << server_address << std::endl;
 
-  server->Wait();
+    server->Wait();
 
-  return NULL;
+    return NULL;
 }
 
 void* RunServerForNodes(void* arg) {
-  int port = 50056;
-  std::string server_address("0.0.0.0:" + std::to_string(port));
-  LBNodeCommService service(live_servers);
+    string server_address("0.0.0.0:50056");
+    LBNodeCommService service(live_servers);
+    grpc::EnableDefaultHealthCheckService(true);
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+    ServerBuilder builder;
+    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    builder.RegisterService(&service);
+    unique_ptr<Server> server(builder.BuildAndStart());
+    cout << "Server for Nodes listening on " << server_address << std::endl;
 
-  grpc::EnableDefaultHealthCheckService(true);
-  grpc::reflection::InitProtoReflectionServerBuilderPlugin();
-  ServerBuilder builder;
-  // Listen on the given address without any authentication mechanism.
-  builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-  // Register "service" as the instance through which we'll communicate with
-  // clients. In this case it corresponds to an *synchronous* service.
-  builder.RegisterService(&service);
-  // Finally assemble the server.
-  std::unique_ptr<Server> server(builder.BuildAndStart());
-  std::cout << "Server for Nodes listening on " << server_address << std::endl;
+    server->Wait();
 
-  // Wait for the server to shutdown. Note that some other thread must be
-  // responsible for shutting down the server for this call to ever return.
-  server->Wait();
-
-  return NULL;
+    return NULL;
 }
 
 /******************************************************************************
