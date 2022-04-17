@@ -21,7 +21,7 @@ get_filename_component(raft_proto "../src/protos/raft.proto" ABSOLUTE)
 get_filename_component(raft_proto_path "${raft_proto}" PATH)
 
 # Proto file 4
-get_filename_component(userops_proto "../src/protos/userops.proto" ABSOLUTE)
+get_filename_component(userops_proto "../src/protos/keyvalueops.proto" ABSOLUTE)
 get_filename_component(userops_proto_path "${userops_proto}" PATH)
 
 # Generated sources
@@ -71,10 +71,10 @@ add_custom_command(
       DEPENDS "${raft_proto}")
 
 # Proto file 4
-set(userops_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/userops.pb.cc")
-set(userops_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/userops.pb.h")
-set(userops_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/userops.grpc.pb.cc")
-set(userops_grpc_hdrs "${CMAKE_CURRENT_BINARY_DIR}/userops.grpc.pb.h")
+set(userops_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.pb.cc")
+set(userops_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.pb.h")
+set(userops_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.grpc.pb.cc")
+set(userops_grpc_hdrs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.grpc.pb.h")
 add_custom_command(
       OUTPUT "${userops_proto_srcs}" "${userops_proto_hdrs}" "${userops_grpc_srcs}" "${userops_grpc_hdrs}"
       COMMAND ${_PROTOBUF_PROTOC}
@@ -137,8 +137,9 @@ target_link_libraries(client_lib
   userops_grpc_proto
 )
 
-# Client and LB
-foreach(_target client )
+#Client and LB
+foreach(_target
+  loadbalancer)
   add_executable(${_target} "${_target}.cc")
   target_link_libraries(${_target}
     userops_grpc_proto
@@ -153,22 +154,10 @@ endforeach()
 # Server
 foreach(_target
   server )
-#  add_library(atl "util/address_translation.cc")
-#  add_library(wal "util/wal.cc")
-#  add_library(txn "util/txn.cc")
-#  add_library(kv "util/kv_store.cc")
   add_library(locks "util/locks.cc")
-#  add_library(cacheUtil "util/cache.cc")
   add_executable(${_target} "./server/${_target}.cc")
   target_link_libraries(${_target}
-#    atl
-#    wal
-#    txn
-#    kv
-#    cr
     locks
-#    cacheUtil
-#  hw_grpc_proto
     comm_grpc_proto
     lb_grpc_proto
     raft_grpc_proto

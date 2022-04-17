@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package blockstorage;
 
-service UserOps
+service KeyValueOps
 {
     rpc GetFromDB(GetRequest) returns (GetReply) {}
     rpc PutToDB(PutRequest) returns (PutReply) {}
