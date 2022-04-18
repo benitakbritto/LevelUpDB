@@ -109,12 +109,12 @@ class LBNodeCommService final: public LBNodeComm::Service {
                     break;
                 }
                 dbgprintf("[INFO]: recv heartbeat from IP:[%s]\n", request.ip().c_str());
-                print_map();
+
                 identity = Identity_Name(request.identity());
                 ip = request.ip();
                 registerNode(identity, ip);
                 
-                if(identity.compare(LEADER) == 0){
+                if(identity.compare(LEADER_STR) == 0){
                     updateLeader(ip);
                 }
                 if(!stream->Write(reply)) {

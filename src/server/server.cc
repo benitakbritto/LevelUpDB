@@ -62,7 +62,7 @@ class LBNodeCommClient {
 
     void SendHeartBeat() {
         ClientContext context;
-
+        
         std::shared_ptr<ClientReaderWriter<HeartBeatRequest, HeartBeatReply> > stream(
             stub_->SendHeartBeat(&context));
 
@@ -80,21 +80,20 @@ class LBNodeCommClient {
           
           // TODO : Parse reply to get sys state
 
-          dbgprintf("[INFO] SendHeartBeat: sleeping for 3 sec\n");
+          dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
           sleep(HB_SLEEP_IN_SEC);
         }
     }
 };
 
 void *StartHB(void* args) {
-    Identity identity_enum = FOLLOWER;
+    Identity identity_enum = LEADER;
 
     LBNodeCommClient lBNodeCommClient(lb_addr, identity_enum, self_addr_lb);
     lBNodeCommClient.SendHeartBeat();
 
     return NULL;
 }
-
 
 
 // void RunServer() {
