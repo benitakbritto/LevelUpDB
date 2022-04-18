@@ -1,11 +1,20 @@
 // TODO: Add to cmake
 #include "state_helper.h"
 
+/*
+*   @brief Get the current term from mem
+*/
 int StateHelper::GetCurrentTerm()
 {
     return vTermVoteObj.GetCurrentTerm();
 }
 
+/*
+*   @brief Add node ip vote for current term in mem and persistent
+*
+*   @param term 
+*   @param ip 
+*/
 void StateHelper::AddVotedFor(int term, string ip)
 {
     if (vTermVoteObj.HasNotVoted(term))
@@ -15,12 +24,22 @@ void StateHelper::AddVotedFor(int term, string ip)
     }
 }
 
+/*
+*   @brief Get voted node ip for specified term
+*
+*   @param term 
+*   @return ip 
+*/
 string StateHelper::GetVotedFor(int term)
 {
     return vTermVoteObj.GetVotedFor(term);
 }
 
-
+/*
+*   @brief Update current term in mem and persist
+*
+*   @param term 
+*/
 void StateHelper::AddCurrentTerm(int term)
 {
     vTermVoteObj.UpdateCurrentTerm(term);
@@ -99,6 +118,9 @@ int StateHelper::GetTermAtIndex(int index)
     return vReplicatedLogObj.GetTerm(index);
 }
 
+/*
+*   @brief Parse logs
+*/
 void StateHelper::Init()
 {
     // Term vote log
@@ -121,27 +143,53 @@ void StateHelper::Init()
     }
 }
 
+/*
+*   @brief Update commit index in mem
+*
+*   @param index 
+*/
 void StateHelper::SetCommitIndex(int index)
 {
     vStateObj.SetCommitIndex(index);
 }
 
 
+/* 
+*   @brief Retrieve commit index from mem
+*
+*   @return commit index 
+*/
 int StateHelper::GetCommitIndex()
 {
     return vStateObj.GetCommitIndex();
 }
 
+/*
+*   @brief Update index of latest executed command in mem
+*
+*   @param index 
+*/
 void StateHelper::SetLastAppliedIndex(int index)
 {
     vStateObj.SetLastAppliedIndex(index);
 }
 
+/*
+*   @brief Get index of latest executed command from mem
+*
+*   @return index 
+*/
 int StateHelper::GetLastAppliedIndex()
 {
     return vStateObj.GetLastAppliedIndex();
 }
 
+/*
+*   @brief Set identity of server to Leader/Follower/Candidate in mem
+*           Note: Use the Identity enum in common.h
+*
+*   @param identity 
+*/
 void StateHelper::SetIdentity(int identity)
 {
     int prevIdentity = vStateObj.GetIdentity();
@@ -154,33 +202,65 @@ void StateHelper::SetIdentity(int identity)
     vStateObj.SetIdentity(identity);
 }
 
+/*
+*   @brief Get identity of server from mem
+*/
 int StateHelper::GetIdentity()
 {
     return vStateObj.GetIdentity();
 }
 
+/*
+*   @brief Set next index (value) of particular serverId in mem
+*
+*   @param serverId 
+*   @param value 
+*/
 void StateHelper::SetNextIndex(string serverId, int value)
 {
     vStateObj.SetNextIndex(serverId, value);
 }
 
+/*
+*   @brief Get next index (value) of particular serverId from mem
+*
+*   @param serverId 
+*   @return value 
+*/
 int StateHelper::GetNextIndex(string serverId)
 {
     return vStateObj.GetNextIndex(serverId);
 }
 
+/*
+*   @brief Set match index (value) of particular serverId in mem
+*
+*   @param serverId 
+*   @param value 
+*/
 void StateHelper::SetMatchIndex(string serverId, int value)
 {
     vStateObj.SetMatchIndex(serverId, value);
 }
 
+/*
+*   @brief Get next index (value) of particular serverId from mem
+*
+*   @param serverId 
+*   @return value 
+*/
 int StateHelper::GetMatchIndex(string serverId)
 {
     return vStateObj.GetMatchIndex(serverId);
 }
 
-// Tester
-// g++ state_helper.cc term_vote_volatile.cc term_vote_persistent.cc replicated_log_persistent.cc replicated_log_volatile.cc state_volatile.cc  -Wall -o state
+/*
+*   @brief Uncomment to test individually
+*   @usage g++ state_helper.cc term_vote_volatile.cc 
+*          term_vote_persistent.cc replicated_log_persistent.cc 
+*          replicated_log_volatile.cc state_volatile.cc  -Wall -o state 
+*          && ./state
+*/
 // int main()
 // {
 //     StateHelper obj;

@@ -16,21 +16,44 @@ PersistentTermVote::PersistentTermVote()
     dbgprintf("[INFO]: Init logging at: %s\n", file_path.c_str());
 }
 
+/*
+*   @brief Persist term
+*
+*   @param term 
+*/
 void PersistentTermVote::AddTerm(int term)
 {
     WriteToLog(term, "");
 }
 
+/*
+*   @brief Persist voted for for specified term
+*
+*   @param term 
+*   @return ip 
+*/
 void PersistentTermVote::AddVotedFor(int term, string ip)
 {
     WriteToLog(term, ip);
 }
 
+/*
+*   @brief Helper for creating a log entry with term and ip
+*
+*   @param term 
+*   @return ip 
+*/
 string PersistentTermVote::CreateLogEntry(int term, string ip)
 {
     return to_string(term) + DELIM + ip + "\n";
 }
 
+/*
+*   @brief Append to the log
+*
+*   @param term 
+*   @return ip 
+*/
 void PersistentTermVote::WriteToLog(int term, string ip)
 {
     dbgprintf("[DEBUG]: WriteToLog - Entering function\n");
@@ -54,6 +77,9 @@ void PersistentTermVote::WriteToLog(int term, string ip)
     dbgprintf("[DEBUG]: WriteToLog - Exiting function\n");
 }
 
+/*
+*   @brief Get all log entries
+*/
 vector<TVEntry> PersistentTermVote::ParseLog()
 {
     dbgprintf("[DEBUG]: ParseLog - Entering function\n");

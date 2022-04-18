@@ -156,6 +156,8 @@ int PersistentReplicatedLog::GetCurrentFileOffset()
 
 /*
 *   @brief Get all the entries in the log
+*
+*   @param All log entries
 */
 vector<PLogEntry> PersistentReplicatedLog::ParseLog()
 {
@@ -211,8 +213,3 @@ vector<PLogEntry> PersistentReplicatedLog::ParseLog()
     dbgprintf("[DEBUG]: ParseLog - Exiting function\n");
     return ret;
 }
-
-// void PersistentReplicatedLog::SetFilePosition()
-// {
-//     lseek(fd, 0, SEEK_END);
-// }

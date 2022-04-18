@@ -1,5 +1,10 @@
 #include "term_vote_volatile.h"
 
+/*
+*   @brief Change current term in mem
+*
+*   @param term 
+*/
 void VolatileTermVote::UpdateCurrentTerm(int term)
 {
     if (current_term > term)
@@ -10,11 +15,22 @@ void VolatileTermVote::UpdateCurrentTerm(int term)
     current_term = term;
 }
 
+/*
+*   @brief Get current term from mem
+*
+*   @return term
+*/
 int VolatileTermVote::GetCurrentTerm()
 {
     return current_term;
 }
 
+/*
+*   @brief Set voted for node ip to term in mem
+*
+*   @param  term
+*   @param  ip
+*/
 void VolatileTermVote::AddVotedFor(int term, string ip)
 {
     if (votedFor.count(term) != 0)
@@ -25,6 +41,12 @@ void VolatileTermVote::AddVotedFor(int term, string ip)
     votedFor[term] = ip;
 }
 
+/*
+*   @brief Get the voted for node ip for term from mem
+*
+*   @param term
+*   @return ip
+*/
 string VolatileTermVote::GetVotedFor(int term)
 {
     if (votedFor.count(term) == 0)
@@ -35,12 +57,21 @@ string VolatileTermVote::GetVotedFor(int term)
     return votedFor[term];
 }
 
+/*
+*   @brief Check if already voted for a node in term
+*
+*   @param  term
+*   @return  voted status
+*/
 bool VolatileTermVote::HasNotVoted(int term)
 {
     return (votedFor.count(term) == 0) ? false : true;
 }
 
-// Tester
+/*
+*   @brief Uncomment to test individually
+*   @usage g++ -o tv term_vote_volatile.cc -Wall  
+*/
 // int main()
 // {
 //     VolatileTermVote obj; 

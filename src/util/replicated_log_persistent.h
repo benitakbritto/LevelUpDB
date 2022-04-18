@@ -59,7 +59,6 @@ public:
     int GetEndOfFileOffset();
     int GetCurrentFileOffset();
     vector<PLogEntry> ParseLog();
-    // void SetFilePosition();
 };
 
 
