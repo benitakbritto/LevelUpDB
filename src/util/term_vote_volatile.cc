@@ -2,6 +2,11 @@
 
 void VolatileTermVote::UpdateCurrentTerm(int term)
 {
+    if (current_term > term)
+    {
+        throw ("[ERROR]: Cannot decrement current term");
+    }
+    
     current_term = term;
 }
 
@@ -35,19 +40,20 @@ bool VolatileTermVote::HasVoted(int term)
     return votedFor.count(term) == 0 ? false : true;
 }
 
-int main()
-{
-    VolatileTermVote obj; 
+// Tester
+// int main()
+// {
+//     VolatileTermVote obj; 
 
-    obj.UpdateCurrentTerm(1);
-    dbgprintf("Current Term = %d\n", obj.GetCurrentTerm());
+//     obj.UpdateCurrentTerm(1);
+//     dbgprintf("Current Term = %d\n", obj.GetCurrentTerm());
     
-    dbgprintf("Has voted = %d\n", obj.HasVoted(1));
+//     dbgprintf("Has voted = %d\n", obj.HasVoted(1));
 
-    obj.AddVotedFor(1, "Node1");
-    dbgprintf("Has voted = %d\n", obj.HasVoted(1));
-    dbgprintf("Voted for = %s\n", obj.GetVotedFor(1).c_str());
+//     obj.AddVotedFor(1, "Node1");
+//     dbgprintf("Has voted = %d\n", obj.HasVoted(1));
+//     dbgprintf("Voted for = %s\n", obj.GetVotedFor(1).c_str());
 
-    obj.AddVotedFor(1, "Node2"); // should fail
-    return 0;
-}
+//     obj.AddVotedFor(1, "Node2"); // should fail
+//     return 0;
+// }

@@ -1,3 +1,5 @@
+// TODO: Add locks
+// TODO: Add to cmake
 #include "term_vote_persistent.h"
 
 PersistentTermVote::PersistentTermVote()
@@ -52,13 +54,13 @@ void PersistentTermVote::WriteToLog(int term, string ip)
     dbgprintf("[DEBUG]: WriteToLog - Exiting function\n");
 }
 
+// Tester
+// int main()
+// {
+//     PersistentTermVote obj;
 
-int main()
-{
-    PersistentTermVote obj;
+//     obj.AddTerm(1);
+//     obj.AddVotedFor(1, "Node1");
 
-    obj.AddTerm(1);
-    obj.AddVotedFor(1, "Node1");
-
-    return 0;
-}
+//     return 0;
+// }
