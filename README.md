@@ -24,6 +24,7 @@ Follow the commands mentioned [here](https://github.com/google/leveldb#getting-t
 ```
 ./loadbalancer
 ./server
+./keyvalue_client
 ```
 
 ## Deliverables
