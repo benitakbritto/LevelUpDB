@@ -21,7 +21,10 @@ Follow the commands mentioned [here](https://github.com/google/leveldb#getting-t
 2. `./build.sh`
 
 ### Run
-<TODO>
+```
+./loadbalancer
+./server
+```
 
 ## Deliverables
 <TODO>
