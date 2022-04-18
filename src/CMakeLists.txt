@@ -139,6 +139,7 @@ target_link_libraries(client_lib
 
 #Client and LB
 foreach(_target
+  keyvalue_client
   loadbalancer)
   add_executable(${_target} "${_target}.cc")
   target_link_libraries(${_target}
