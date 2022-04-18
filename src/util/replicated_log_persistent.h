@@ -47,10 +47,9 @@ class PersistentReplicatedLog
 private:
     int fd;
     string CreateLogEntry(int term, string key, string value, int offset);
-    
     void GoToOffset(int offset);
-    void GoToEndOfFile();
     void WriteToLog(int term, string key, string value, int offset);
+    void GoToEndOfFile();
 
 public:
     PersistentReplicatedLog();
@@ -60,6 +59,7 @@ public:
     int GetEndOfFileOffset();
     int GetCurrentFileOffset();
     vector<PLogEntry> ParseLog();
+    // void SetFilePosition();
 };
 
 

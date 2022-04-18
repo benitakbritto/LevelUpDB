@@ -12,7 +12,14 @@
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
+struct TermVoteEntry
+{
+    int term;
+    string votedFor;
+    TermVoteEntry(int term, string votedFor) : term(term), votedFor(votedFor) {}
+};
 
+typedef struct TermVoteEntry TVEntry;
 
 /******************************************************************************
  * MACROS
@@ -39,8 +46,7 @@ public:
     PersistentTermVote();
     void AddTerm(int term);
     void AddVotedFor(int term, string ip);
-
+    vector<TVEntry> ParseLog();
 };
-
 
 #endif

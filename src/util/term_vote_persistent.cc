@@ -54,13 +54,39 @@ void PersistentTermVote::WriteToLog(int term, string ip)
     dbgprintf("[DEBUG]: WriteToLog - Exiting function\n");
 }
 
-// Tester
-// int main()
-// {
-//     PersistentTermVote obj;
+vector<TVEntry> PersistentTermVote::ParseLog()
+{
+    dbgprintf("[DEBUG]: ParseLog - Entering function\n");
+    vector<TVEntry> ret;
+    ifstream file(TERM_VOTE_PATH);
 
-//     obj.AddTerm(1);
-//     obj.AddVotedFor(1, "Node1");
+    if (file.is_open())
+    {
+        string line;
+        while (getline(file, line))
+        {
+            int term_start = 0;
+            int term_end = 0;
+            int voted_start = 0;
+            int voted_end = 0;
+            int term = 0;;
+            string votedFor = "";
+            
+            // get term
+            term_end = line.find(DELIM);
+            term = atoi(line.substr(term_start, term_end).c_str());
+            dbgprintf("[DEBUG] term = %d\n", term);
 
-//     return 0;
-// }
+            // get voted for
+            voted_start = term_end + 1;
+            voted_end = line.find(DELIM, voted_start);
+            votedFor = line.substr(voted_start, voted_end - term_end - 1);
+            dbgprintf("[DEBUG] voted for = %s\n", votedFor.c_str());
+
+            ret.push_back(TVEntry(term,votedFor));
+        }
+    }
+
+    dbgprintf("[DEBUG]: ParseLog - Exiting function\n");
+    return ret;
+}

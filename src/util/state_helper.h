@@ -17,11 +17,22 @@
 #include <vector>
 #include "term_vote_persistent.h"
 #include "term_vote_volatile.h"
+#include "replicated_log_persistent.h"
+#include "replicated_log_volatile.h"
 
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
+struct ReplicatedLogEntry
+{
+    int term;
+    string key;
+    string value;
+    ReplicatedLogEntry(int term, string key, string value)
+            : term(term), key(key), value(value) {}
+};
 
+typedef ReplicatedLogEntry Entry;
 
 /******************************************************************************
  * MACROS
@@ -42,13 +53,23 @@ class StateHelper
 private:
     PersistentTermVote pTermVoteObj;
     VolatileTermVote vTermVoteObj;
+    PersistentReplicatedLog pReplicatedLogObj;
+    VolatileReplicatedLog vReplicatedLogObj;
     
 public:
+    void Init();
+
+    // Term Vote
     int GetCurrentTerm();
     void AddVotedFor(int term, string ip);
     string GetVotedFor(int term);
     void AddCurrentTerm(int term);
-    void Init();
+    
+    // Replicated Log
+    void Append(int term, string key, string value);
+    void Insert(int start_index, vector<Entry> &entries);
+    int GetLogLength();
+    int GetTermAtIndex(int index);
 };
 
 

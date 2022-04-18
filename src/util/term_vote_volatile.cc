@@ -35,9 +35,9 @@ string VolatileTermVote::GetVotedFor(int term)
     return votedFor[term];
 }
 
-bool VolatileTermVote::HasVoted(int term)
+bool VolatileTermVote::HasNotVoted(int term)
 {
-    return votedFor.count(term) == 0 ? false : true;
+    return (votedFor.count(term) == 0) ? false : true;
 }
 
 // Tester

@@ -39,3 +39,4 @@ cmake
 
 # log files
 storage/replicated_log
+storage/term_vote
