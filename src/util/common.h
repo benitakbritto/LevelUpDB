@@ -4,6 +4,11 @@
 #include <iostream>
 
 /******************************************************************************
+ * GLOBALS
+ *****************************************************************************/
+enum Identity { LEADER, FOLLOWER, CANDIDATE};
+
+/******************************************************************************
  * MACROS
  *****************************************************************************/
 #define DEBUG                       1                 
@@ -13,8 +18,9 @@
 #define REPLICATED_LOG_PATH         "/home/benitakbritto/CS739-P4/storage/replicated_log"
 #define TERM_VOTE_PATH              "/home/benitakbritto/CS739-P4/storage/term_vote"
 #define HB_SLEEP_IN_SEC             5
-#define LEADER_STR "LEADER"
-#define FOLLOWER_STR "FOLLOWER"
+#define LEADER_STR                  "LEADER"
+#define FOLLOWER_STR                "FOLLOWER"
+
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/

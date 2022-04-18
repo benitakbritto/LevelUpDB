@@ -1,3 +1,4 @@
+// TODO: Add to cmake
 #include "state_helper.h"
 
 int StateHelper::GetCurrentTerm()
@@ -120,8 +121,66 @@ void StateHelper::Init()
     }
 }
 
+void StateHelper::SetCommitIndex(int index)
+{
+    vStateObj.SetCommitIndex(index);
+}
+
+
+int StateHelper::GetCommitIndex()
+{
+    return vStateObj.GetCommitIndex();
+}
+
+void StateHelper::SetLastAppliedIndex(int index)
+{
+    vStateObj.SetLastAppliedIndex(index);
+}
+
+int StateHelper::GetLastAppliedIndex()
+{
+    return vStateObj.GetLastAppliedIndex();
+}
+
+void StateHelper::SetIdentity(int identity)
+{
+    int prevIdentity = vStateObj.GetIdentity();
+
+    if ((identity == LEADER && prevIdentity == FOLLOWER))
+    {
+        throw runtime_error("[ERROR]: Invalid state transition");
+    }
+
+    vStateObj.SetIdentity(identity);
+}
+
+int StateHelper::GetIdentity()
+{
+    return vStateObj.GetIdentity();
+}
+
+void StateHelper::SetNextIndex(string serverId, int value)
+{
+    vStateObj.SetNextIndex(serverId, value);
+}
+
+int StateHelper::GetNextIndex(string serverId)
+{
+    return vStateObj.GetNextIndex(serverId);
+}
+
+void StateHelper::SetMatchIndex(string serverId, int value)
+{
+    vStateObj.SetMatchIndex(serverId, value);
+}
+
+int StateHelper::GetMatchIndex(string serverId)
+{
+    return vStateObj.GetMatchIndex(serverId);
+}
+
 // Tester
-// g++ state_helper.cc term_vote_volatile.cc term_vote_persistent.cc replicated_log_persistent.cc replicated_log_volatile.cc -Wall -o state
+// g++ state_helper.cc term_vote_volatile.cc term_vote_persistent.cc replicated_log_persistent.cc replicated_log_volatile.cc state_volatile.cc  -Wall -o state
 // int main()
 // {
 //     StateHelper obj;
@@ -140,26 +199,26 @@ void StateHelper::Init()
 //     obj.AddVotedFor(1, "node");
 //     cout << "voted for in term 1 = " << obj.GetVotedFor(1) << endl;
 
-    // Test Append
-    // obj.Append(1, "key1", "value");
-    // dbgprintf("Log length = %d\n", obj.GetLogLength());
+//     // Test Append
+//     obj.Append(1, "key1", "value");
+//     dbgprintf("Log length = %d\n", obj.GetLogLength());
 
-    // obj.Append(2, "key2", "value");
-    // dbgprintf("Log length = %d\n", obj.GetLogLength());
+//     obj.Append(2, "key2", "value");
+//     dbgprintf("Log length = %d\n", obj.GetLogLength());
 
-    // obj.Append(3, "key3", "value");
-    // dbgprintf("Log length = %d\n", obj.GetLogLength());
+//     obj.Append(3, "key3", "value");
+//     dbgprintf("Log length = %d\n", obj.GetLogLength());
 
-    // Test Insert
-    // vector<Entry> entries;
-    // entries.push_back(Entry(1, "a", "d"));
-    // entries.push_back(Entry(2, "b", "e"));
-    // obj.Insert(1, entries);
-    // dbgprintf("Log length = %d\n", obj.GetLogLength());
+//     // Test Insert
+//     vector<Entry> entries;
+//     entries.push_back(Entry(1, "a", "d"));
+//     entries.push_back(Entry(2, "b", "e"));
+//     obj.Insert(1, entries);
+//     dbgprintf("Log length = %d\n", obj.GetLogLength());
 
-    // Test Get term
-    // dbgprintf("Term at index %d is %d\n", 1, obj.GetTermAtIndex(1));
-    // dbgprintf("Term at index %d is %d\n", 2, obj.GetTermAtIndex(2));
+//     // Test Get term
+//     dbgprintf("Term at index %d is %d\n", 1, obj.GetTermAtIndex(1));
+//     dbgprintf("Term at index %d is %d\n", 2, obj.GetTermAtIndex(2));
 
 //     return 0;
 // }

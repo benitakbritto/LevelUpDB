@@ -1,4 +1,6 @@
 /*
+*   @brief Handles volatile and persistent state
+*
 *   Replicated Log Format:
 *   <term>,<key>,<value>,<offset at which this entry exist in file>
 *
@@ -19,6 +21,7 @@
 #include "term_vote_volatile.h"
 #include "replicated_log_persistent.h"
 #include "replicated_log_volatile.h"
+#include "state_volatile.h"
 
 /******************************************************************************
  * GLOBALS
@@ -38,12 +41,9 @@ typedef ReplicatedLogEntry Entry;
  * MACROS
  *****************************************************************************/
 
-
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
-
-
 
 /******************************************************************************
  * DECLARATION
@@ -55,21 +55,36 @@ private:
     VolatileTermVote vTermVoteObj;
     PersistentReplicatedLog pReplicatedLogObj;
     VolatileReplicatedLog vReplicatedLogObj;
+    VolatileState vStateObj;
     
 public:
     void Init();
 
-    // Term Vote
+    // Persistent - Term Vote
     int GetCurrentTerm();
     void AddVotedFor(int term, string ip);
     string GetVotedFor(int term);
     void AddCurrentTerm(int term);
     
-    // Replicated Log
+    // Persistent - Replicated Log
     void Append(int term, string key, string value);
     void Insert(int start_index, vector<Entry> &entries);
     int GetLogLength();
     int GetTermAtIndex(int index);
+
+    // Volatile - All servers
+    void SetCommitIndex(int index);
+    int GetCommitIndex();
+    void SetLastAppliedIndex(int index);
+    int GetLastAppliedIndex();
+    void SetIdentity(int identity);
+    int GetIdentity();
+
+    // Volatile - Only leader
+    void SetNextIndex(string serverId, int value);
+    int GetNextIndex(string serverId);
+    void SetMatchIndex(string serverId, int value);
+    int GetMatchIndex(string serverId);
 };
 
 
