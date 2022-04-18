@@ -9,6 +9,7 @@ service LBNodeComm {
 enum Identity {
     LEADER = 0;
     FOLLOWER = 1;
+    CANDIDATE = 2;
 }
 
 message HeartBeatRequest {
