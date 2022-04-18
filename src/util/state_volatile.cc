@@ -43,7 +43,7 @@ int VolatileState::GetLastAppliedIndex()
 
 /*
 *   @brief Set identity of server to Leader/Follower/Candidate in mem
-*           Note: Use the Identity enum in common.h
+*           Note: Use the ServerIdentity enum in common.h
 *
 *   @param identity 
 */
