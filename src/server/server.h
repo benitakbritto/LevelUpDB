@@ -41,11 +41,10 @@ class ServerImplementation final : public Raft::Service {
   void serverInit(string ip, const std::vector<string>& o_hostList);
   MutexMap lockHelper;
   string ip;
-  //StateHelper stateHelper;
+  StateHelper stateHelper;
   std::map<string,std::unique_ptr<Raft::Stub>> stubs;
   const std::vector<std::string> hostList;
 
- private:
   Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
   Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
   Status AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply) override;
@@ -54,7 +53,7 @@ class ServerImplementation final : public Raft::Service {
   void replicateEntries();
   void invokeRequestVote(string host, std::atomic<int> *votesGained);
   void invokeAppendEntries(int o_id);
-  void requestVote();
+  bool requestVote(Raft::Stub* stub);
   void appendEntries();
 
 
@@ -68,9 +67,6 @@ class ServerImplementation final : public Raft::Service {
   int hostCount;
   int votesGained;
   int electionTimeout;
-
-  int nodeState;
-  int currentTerm;
 
   int minElectionTimeout = 800;
   int maxElectionTimeout = 1600;

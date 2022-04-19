@@ -58,10 +58,6 @@ using namespace std;
  * GLOBALS
  *****************************************************************************/
 
-int minElectionTimeout = 800;
-int maxElectionTimeout = 1600;
-int heartbeatInterval = 50;
-
 string self_addr_lb = "0.0.0.0:50051";
 string lb_addr = "0.0.0.0:50056";
 
@@ -154,8 +150,8 @@ void signalHandler(int signum) {
 
 void ServerImplementation::serverInit(string ip, const std::vector<string>& o_hostList) {
     
-    nodeState = ServerIdentity::FOLLOWER;
-    currentTerm = 0;
+    stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    stateHelper.AddCurrentTerm(0);
     
     int old_errno = errno;
     errno = 0;
@@ -169,13 +165,13 @@ void ServerImplementation::serverInit(string ip, const std::vector<string>& o_ho
     errno = old_errno;
     srand(time(NULL));
     ResetElectionTimeout();
-    SetAlarm(ServerImplementation::electionTimeout);
+    SetAlarm(electionTimeout);
 }
         
 /* Candidate starts a new election */
 void ServerImplementation::runForElection() {
 
-    int initialTerm = currentTerm;
+    int initialTerm = stateHelper.GetCurrentTerm();
 
     /* Vote for self - hence 1*/
     std::atomic<int> votesGained(1);
@@ -185,12 +181,12 @@ void ServerImplementation::runForElection() {
         }
     }
     /* OPTIONAL - Can add sleep(electionTimeout */
+    sleep(1); //election timeout
+    // while (votesGained <= hostCount/2 && nodeState == ServerIdentity::CANDIDATE &&
+    //         currentTerm == initialTerm) {
+    // }
 
-    while (votesGained <= hostCount/2 && nodeState == ServerIdentity::CANDIDATE &&
-            currentTerm == initialTerm) {
-    }
-
-    if (votesGained > hostCount/2 && nodeState == ServerIdentity::CANDIDATE) {
+    if (votesGained > hostCount/2 && stateHelper.GetCurrentTerm() == ServerIdentity::CANDIDATE) {
         BecomeLeader();
     }
 }
@@ -199,6 +195,16 @@ void ServerImplementation::invokeRequestVote(string host, atomic<int> *votesGain
     ClientContext context;
     context.set_deadline(chrono::system_clock::now() + 
         chrono::milliseconds(heartbeatInterval));
+
+    if(stubs[host].get()==nullptr)
+    {
+        stubs[host] = Raft::NewStub(grpc::CreateChannel(host, grpc::InsecureChannelCredentials()));
+    }
+
+    if(requestVote(stubs[host].get()))
+    {
+        votesGained++;
+    }
     // TODO: Request Vote Code here
 }
         
@@ -209,9 +215,21 @@ void ServerImplementation::invokeAppendEntries(int o_id) {
     // TODO: Append Entries Code here
 }
         
-void ServerImplementation::requestVote() {
-    // TODO: Request Vote Code here
+bool ServerImplementation::requestVote(Raft::Stub* stub) {
+    ReqVoteRequest req;
+    req.set_term(stateHelper.GetCurrentTerm());
+    req.set_candidateid(ip);
+    req.set_lastlogindex(stateHelper.GetLogLength());
+    req.set_lastlogterm(stateHelper.GetTermAtIndex(stateHelper.GetLogLength() - 1));
+
+    ReqVoteReply reply;
+    ClientContext context;
+
+    Status status = stub->ReqVote(&context, req, &reply);
+
     SetAlarm(electionTimeout);
+
+    return status.ok()? 1 : 0;
 }
         
 void ServerImplementation::appendEntries() {
@@ -226,12 +244,12 @@ void ServerImplementation::replicateEntries() {
         
 void ServerImplementation::BecomeLeader() {
     // TODO: Become Leader Code here
-    nodeState = ServerIdentity::LEADER;
+    stateHelper.SetIdentity(ServerIdentity::LEADER);
     SetAlarm(heartbeatInterval);
 }
         
 void ServerImplementation::BecomeFollower() {
-    nodeState = ServerIdentity::FOLLOWER;
+    stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
 }
         
 /* 
@@ -242,8 +260,8 @@ void ServerImplementation::BecomeFollower() {
 */
 
 void ServerImplementation::BecomeCandidate() {
-    nodeState = ServerIdentity::CANDIDATE;
-    currentTerm++;
+    stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
+    stateHelper.AddCurrentTerm(stateHelper.GetCurrentTerm() + 1);
     dbgprintf("INFO] Become Candidate\n");
 
 
@@ -259,7 +277,7 @@ void ServerImplementation::ResetElectionTimeout() {
 }
 
 void ServerImplementation::SetAlarm(int after_ms) {
-    if (nodeState == ServerIdentity::FOLLOWER) {
+    if (stateHelper.GetIdentity() == ServerIdentity::FOLLOWER) {
         // TODO:
     }
 
