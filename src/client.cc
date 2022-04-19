@@ -22,7 +22,7 @@ Status KeyValueClient::PutToDB(PutRequest request, PutReply* reply)
     Status status;
     int attempt = 0;
     int backoff = 2;
-
+    dbgprintf("Reached client\n");
     do {
         sleep(attempt * backoff);
         // PutReply reply;

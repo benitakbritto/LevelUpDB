@@ -38,8 +38,8 @@ public:
       : stub_(KeyValueOps::NewStub(channel)) {}
     
     // void Connect(string target);
-    Status GetFromDB(GetRequest request, GetReply *reply);
-    Status PutToDB(PutRequest request, PutReply *reply);
+    Status GetFromDB(GetRequest request, GetReply* reply);
+    Status PutToDB(PutRequest request, PutReply* reply);
 };
 
 #endif

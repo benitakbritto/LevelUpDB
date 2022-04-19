@@ -21,8 +21,8 @@ get_filename_component(raft_proto "../src/protos/raft.proto" ABSOLUTE)
 get_filename_component(raft_proto_path "${raft_proto}" PATH)
 
 # Proto file 4
-get_filename_component(userops_proto "../src/protos/keyvalueops.proto" ABSOLUTE)
-get_filename_component(userops_proto_path "${userops_proto}" PATH)
+get_filename_component(keyvalueops_proto "../src/protos/keyvalueops.proto" ABSOLUTE)
+get_filename_component(keyvalueops_proto_path "${keyvalueops_proto}" PATH)
 
 # Generated sources
 # Proto file 1
@@ -71,19 +71,19 @@ add_custom_command(
       DEPENDS "${raft_proto}")
 
 # Proto file 4
-set(userops_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.pb.cc")
-set(userops_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.pb.h")
-set(userops_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.grpc.pb.cc")
-set(userops_grpc_hdrs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.grpc.pb.h")
+set(keyvalueops_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.pb.cc")
+set(keyvalueops_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.pb.h")
+set(keyvalueops_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.grpc.pb.cc")
+set(keyvalueops_grpc_hdrs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.grpc.pb.h")
 add_custom_command(
-      OUTPUT "${userops_proto_srcs}" "${userops_proto_hdrs}" "${userops_grpc_srcs}" "${userops_grpc_hdrs}"
+      OUTPUT "${keyvalueops_proto_srcs}" "${keyvalueops_proto_hdrs}" "${keyvalueops_grpc_srcs}" "${keyvalueops_grpc_hdrs}"
       COMMAND ${_PROTOBUF_PROTOC}
       ARGS --grpc_out "${CMAKE_CURRENT_BINARY_DIR}"
         --cpp_out "${CMAKE_CURRENT_BINARY_DIR}"
-        -I "${userops_proto_path}"
+        -I "${keyvalueops_proto_path}"
         --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
-        "${userops_proto}"
-      DEPENDS "${userops_proto}")
+        "${keyvalueops_proto}"
+      DEPENDS "${keyvalueops_proto}")
 
 # Include generated *.pb.h files
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
@@ -122,19 +122,19 @@ target_link_libraries(raft_grpc_proto
   ${_PROTOBUF_LIBPROTOBUF})
 
 # Proto file 4
-add_library(userops_grpc_proto
-  ${userops_grpc_srcs}
-  ${userops_grpc_hdrs}
-  ${userops_proto_srcs}
-  ${userops_proto_hdrs})
-target_link_libraries(userops_grpc_proto
+add_library(keyvalueops_grpc_proto
+  ${keyvalueops_grpc_srcs}
+  ${keyvalueops_grpc_hdrs}
+  ${keyvalueops_proto_srcs}
+  ${keyvalueops_proto_hdrs})
+target_link_libraries(keyvalueops_grpc_proto
   ${_REFLECTION}
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
 add_library(client_lib "client.cc")
 target_link_libraries(client_lib 
-  userops_grpc_proto
+  keyvalueops_grpc_proto
 )
 
 #Client and LB
@@ -143,7 +143,7 @@ foreach(_target
   loadbalancer)
   add_executable(${_target} "${_target}.cc")
   target_link_libraries(${_target}
-    userops_grpc_proto
+    keyvalueops_grpc_proto
     lb_grpc_proto
     client_lib
     ${_REFLECTION}
@@ -159,6 +159,7 @@ foreach(_target
   add_executable(${_target} "./server/${_target}.cc")
   target_link_libraries(${_target}
     locks
+    keyvalueops_grpc_proto
     comm_grpc_proto
     lb_grpc_proto
     raft_grpc_proto

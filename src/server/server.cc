@@ -24,8 +24,9 @@
 #include <ctime>
 
 #include <grpc++/grpc++.h>
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
-
+#include "keyvalueops.grpc.pb.h"
 #include "raft.grpc.pb.h"
 #include "lb.grpc.pb.h"
 #include "../util/common.h"
@@ -39,10 +40,12 @@ using grpc::ServerContext;
 using grpc::ServerWriter;
 using grpc::ServerReader;
 using grpc::Status;
+using grpc::Service;
 using grpc::ClientContext;
 using grpc::ClientReaderWriter;
 using namespace blockstorage;
 using namespace std;
+
 
 /******************************************************************************
  * MACROS
@@ -51,11 +54,47 @@ using namespace std;
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
-string self_addr_lb = "0.0.0.0:50051";
-string lb_addr = "0.0.0.0:50056";
+string self_addr_lb = "0.0.0.0:50056";
+string lb_addr = "0.0.0.0:50052";
+
 int minElectionTimeout = 800;
 int maxElectionTimeout = 1600;
 int heartbeatInterval = 50;
+
+/******************************************************************************
+ * DECLARATION
+ *****************************************************************************/
+
+class KeyValueOpsServiceImpl final : public KeyValueOps::Service {
+
+    public:
+        Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override {
+            dbgprintf("reached server\n");
+            return Status::OK;
+        }
+
+        Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override {
+            dbgprintf("reached server\n");
+            return Status::OK;
+        }
+
+};
+
+void *RunKeyValueServer(void* args) {
+    KeyValueOpsServiceImpl service;
+    // string server_address(self_addr_lb);
+    grpc::EnableDefaultHealthCheckService(true);
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+    ServerBuilder builder;
+    builder.AddListeningPort(self_addr_lb, grpc::InsecureServerCredentials());
+    builder.RegisterService(&service);
+    std::unique_ptr<Server> server(builder.BuildAndStart());
+    
+    cout << "[INFO] KeyValue Server listening on "<< self_addr_lb << std::endl;
+    
+    server->Wait();
+    return NULL;
+}
 
 class LBNodeCommClient {
   private:
@@ -222,23 +261,29 @@ class ServerImplementation final : public Raft::Service {
 };
 
 void RunServer() {
-    string server_address("0.0.0.0:50051");
+    string server_address("0.0.0.0:50056");
     ServerImplementation service;
     ServerBuilder builder;
     builder.SetMaxReceiveMessageSize((1.5 * 1024 * 1024 * 1024));
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     unique_ptr<Server> server(builder.BuildAndStart());
-	dbgprintf("INFO] Server is live\n");
+	  dbgprintf("INFO] Server is live\n");
 
     service.serverInit();
     server->Wait();
 }
 
 int main(int argc, char **argv) {
+    pthread_t kv_server_t;
     pthread_t hb_t;
+    
+    pthread_create(&kv_server_t, NULL, RunKeyValueServer, NULL);
     pthread_create(&hb_t, NULL, StartHB, NULL);
+
     pthread_join(hb_t, NULL);
-    RunServer();
+    pthread_join(kv_server_t, NULL);
+    
+    // RunServer();
     return 0;
 }

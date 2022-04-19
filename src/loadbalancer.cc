@@ -27,8 +27,8 @@ using namespace std;
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
-map<string, int> live_servers;
-map<string, KeyValueClient*> kv_clients;
+unordered_map<string, pair<int, KeyValueClient*>> nodes; // <ip: <id, stub>>
+string leaderIP;
 
 /******************************************************************************
  * DECLARATION
@@ -37,22 +37,29 @@ class KeyValueService final : public KeyValueOps::Service {
     private:
         // for round-robin
         int idx = 0;
-        map<string, int>* nodes;
-        map<string, KeyValueClient*>* kv_clients;
 
-        string getServerToRouteTo(){
-            idx = (++idx) % (nodes->size());
+        KeyValueClient* getServerIPToRouteTo(){
+            idx = (++idx) % (nodes.size());
             dbgprintf("[INFO]: current idx is: %d\n", idx);
-            auto it = nodes->begin();
+            auto it = nodes.begin();
             advance(it, idx);
-            return it->first.c_str();
+            return it->second.second;
         }
+
+        Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override {
+            KeyValueClient* stub = getServerIPToRouteTo();
+            return stub->GetFromDB(*request, reply);
+        }
+
+        Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override {
+            dbgprintf("Reached LB Put \n");
+            KeyValueClient* stub = nodes[leaderIP].second;
+            dbgprintf("%d %s \n", stub == NULL, leaderIP.c_str());
+            return stub->PutToDB(*request, reply);
+        } 
 
     public:
-        KeyValueService(map<string, int> &servers, map<string, KeyValueClient*> &clients){
-            nodes = &servers;
-            kv_clients = &clients;
-        }
+        KeyValueService(){}
 
 };
 
@@ -62,11 +69,10 @@ class KeyValueService final : public KeyValueOps::Service {
 class LBNodeCommService final: public LBNodeComm::Service {
     
     private:
-        map<string, int> nodes; //ip:identity map
-        string leaderIP;
 
-        void registerNode(int identity, string target_str) {
-            nodes[target_str] = identity;
+        void registerNode(int identity, string ip) {
+            nodes[ip] = make_pair(identity,
+                            new KeyValueClient (grpc::CreateChannel("0.0.0.0:50056", grpc::InsecureChannelCredentials())));
         }
 
         void eraseNode(string ip) {
@@ -75,16 +81,14 @@ class LBNodeCommService final: public LBNodeComm::Service {
 
         void updateLeader(string ip) {
             if(!leaderIP.empty()) {
-                nodes[leaderIP] = FOLLOWER;
+                nodes[leaderIP].first = FOLLOWER;
             }
             leaderIP = ip;
-            nodes[ip] = LEADER;
+            nodes[leaderIP].first = LEADER;
         }
 
     public:
-        LBNodeCommService(map<string, int> servers) {
-            nodes = servers;
-        }
+        LBNodeCommService() {}
 
         Status SendHeartBeat(ServerContext* context, ServerReaderWriter<HeartBeatReply, HeartBeatRequest>* stream) override {
             HeartBeatRequest request;
@@ -123,7 +127,7 @@ class LBNodeCommService final: public LBNodeComm::Service {
 
 void* RunServerForClient(void* arg) {
     string server_address("0.0.0.0:50051");
-    KeyValueService service(live_servers, kv_clients);
+    KeyValueService service;
 
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
@@ -139,8 +143,8 @@ void* RunServerForClient(void* arg) {
 }
 
 void* RunServerForNodes(void* arg) {
-    string server_address("0.0.0.0:50056");
-    LBNodeCommService service(live_servers);
+    string server_address("0.0.0.0:50052");
+    LBNodeCommService service;
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
     ServerBuilder builder;
@@ -165,4 +169,5 @@ int main (int argc, char *argv[]){
 
     pthread_join(client_server_t, NULL);
     pthread_join(node_server_t, NULL);
+
 }
