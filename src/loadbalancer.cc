@@ -27,7 +27,7 @@ using namespace std;
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
-map<string, string> live_servers;
+map<string, int> live_servers;
 map<string, KeyValueClient*> kv_clients;
 
 /******************************************************************************
@@ -37,17 +37,8 @@ class KeyValueService final : public KeyValueOps::Service {
     private:
         // for round-robin
         int idx = 0;
-        map<string, string>* nodes;
+        map<string, int>* nodes;
         map<string, KeyValueClient*>* kv_clients;
-
-        void print_map() {
-            for (std::map<string,string>::iterator it=nodes->begin(); it!=nodes->end(); ++it)
-                dbgprintf("%s => %s\n", it->first.c_str(), it->second.c_str());
-        }
-        
-        bool is_registered(string ip) {
-            return !((*nodes)[ip].empty());
-        }
 
         string getServerToRouteTo(){
             idx = (++idx) % (nodes->size());
@@ -58,7 +49,7 @@ class KeyValueService final : public KeyValueOps::Service {
         }
 
     public:
-        KeyValueService(map<string, string> &servers, map<string, KeyValueClient*> &clients){
+        KeyValueService(map<string, int> &servers, map<string, KeyValueClient*> &clients){
             nodes = &servers;
             kv_clients = &clients;
         }
@@ -71,10 +62,10 @@ class KeyValueService final : public KeyValueOps::Service {
 class LBNodeCommService final: public LBNodeComm::Service {
     
     private:
-        map<string, string> nodes; //ip:identity map
+        map<string, int> nodes; //ip:identity map
         string leaderIP;
 
-        void registerNode(string identity, string target_str) {
+        void registerNode(int identity, string target_str) {
             nodes[target_str] = identity;
         }
 
@@ -84,14 +75,14 @@ class LBNodeCommService final: public LBNodeComm::Service {
 
         void updateLeader(string ip) {
             if(!leaderIP.empty()) {
-                nodes[leaderIP] = FOLLOWER_STR;
+                nodes[leaderIP] = FOLLOWER;
             }
             leaderIP = ip;
-            nodes[ip] = LEADER_STR;
+            nodes[ip] = LEADER;
         }
 
     public:
-        LBNodeCommService(map<string, string> servers) {
+        LBNodeCommService(map<string, int> servers) {
             nodes = servers;
         }
 
@@ -99,7 +90,7 @@ class LBNodeCommService final: public LBNodeComm::Service {
             HeartBeatRequest request;
             HeartBeatReply reply;
 
-            string identity;
+            int identity;
             string ip;
             bool first_time = true;
             // TODO: create client on the fly
@@ -110,11 +101,11 @@ class LBNodeCommService final: public LBNodeComm::Service {
                 }
                 dbgprintf("[INFO]: recv heartbeat from IP:[%s]\n", request.ip().c_str());
 
-                identity = Identity_Name(request.identity());
+                identity = request.identity();
                 ip = request.ip();
                 registerNode(identity, ip);
                 
-                if(identity.compare(LEADER_STR) == 0){
+                if(identity == LEADER){
                     updateLeader(ip);
                 }
                 if(!stream->Write(reply)) {

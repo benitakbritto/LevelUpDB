@@ -6,14 +6,8 @@ service LBNodeComm {
     rpc SendHeartBeat(stream HeartBeatRequest) returns (stream HeartBeatReply) {}
 }
 
-enum Identity {
-    LEADER = 0;
-    FOLLOWER = 1;
-    CANDIDATE = 2;
-}
-
 message HeartBeatRequest {
-    Identity identity = 1;
+    uint32 identity = 1;
     string ip = 2;
 }
 

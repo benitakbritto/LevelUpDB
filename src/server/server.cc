@@ -60,11 +60,11 @@ int heartbeatInterval = 50;
 class LBNodeCommClient {
   private:
     unique_ptr<LBNodeComm::Stub> stub_;
-    Identity identity;
+    int identity;
     string ip;
   
   public:
-    LBNodeCommClient(string target_str, Identity _identity, string _ip) {
+    LBNodeCommClient(string target_str, int _identity, string _ip) {
       identity = _identity;
       stub_ = LBNodeComm::NewStub(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
       ip = _ip;
@@ -97,7 +97,7 @@ class LBNodeCommClient {
 };
 
 void *StartHB(void* args) {
-    Identity identity_enum = LEADER;
+    int identity_enum = LEADER;
 
     LBNodeCommClient lBNodeCommClient(lb_addr, identity_enum, self_addr_lb);
     lBNodeCommClient.SendHeartBeat();
