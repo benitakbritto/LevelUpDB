@@ -23,12 +23,11 @@
 #include <cerrno>
 #include <ctime>
 
-#include <grpc++/grpc++.h>
+#include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 
-#include "raft.grpc.pb.h"
+#include "server.h"
 #include "lb.grpc.pb.h"
-#include "../util/common.h"
 
 /******************************************************************************
  * NAMESPACES
@@ -51,11 +50,9 @@ using namespace std;
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
+
 string self_addr_lb = "0.0.0.0:50051";
 string lb_addr = "0.0.0.0:50056";
-int minElectionTimeout = 800;
-int maxElectionTimeout = 1600;
-int heartbeatInterval = 50;
 
 class LBNodeCommClient {
   private:
@@ -109,120 +106,151 @@ void signalHandler(int signum) {
 	return;
 }
 
-class ServerImplementation final : public Raft::Service {
-    public:
-        int nodeState = FOLLOWER;
-        int currentTerm = 0;
-        int electionTimeout;
-
-        void serverInit() {
-            int old_errno = errno;
-            errno = 0;
-            signal(SIGALRM, &signalHandler);
-            
-            if (errno) {
-				dbgprintf("ERROR] Signal could not be set\n");
-                errno = old_errno;
-                return;
-            }
-            errno = old_errno;
-            srand(time(NULL));
-            ResetElectionTimeout();
-            SetAlarm(electionTimeout);
-        }
-        
-        void switchToCandidate() {
-            nodeState = CANDIDATE;
-            currentTerm++;
-			dbgprintf("INFO] Become Candidate\n");
-            ResetElectionTimeout();
-            SetAlarm(electionTimeout);
-            runForElection();
-        }
-
+void ServerImplementation::serverInit(string ip, const std::vector<string>& o_hostList) {
     
-        void runForElection() {
-			// TODO: Conduct Election
-		}
+    nodeState = ServerIdentity::FOLLOWER;
+    currentTerm = 0;
+    
+    int old_errno = errno;
+    errno = 0;
+    signal(SIGALRM, &signalHandler);
+    
+    if (errno) {
+        dbgprintf("ERROR] Signal could not be set\n");
+        errno = old_errno;
+        return;
+    }
+    errno = old_errno;
+    srand(time(NULL));
+    ResetElectionTimeout();
+    SetAlarm(ServerImplementation::electionTimeout);
+}
         
-		void invokeRequestVote(int voterId, atomic<int> *votesGained) {
-            ClientContext context;
-            context.set_deadline(chrono::system_clock::now() + 
-                chrono::milliseconds(heartbeatInterval));
-            // TODO: Request Vote Code here
-        }
-        
-		void invokeAppendEntries(int o_id) {
-            ClientContext context;
-            context.set_deadline(chrono::system_clock::now() + 
-                chrono::milliseconds(heartbeatInterval));
-            // TODO: Append Entries Code here
-        }
-        
-		void requestVote() {
-            // TODO: Request Vote Code here
-            SetAlarm(electionTimeout);
-        }
-        
-		void appendEntries() {
-            // TODO: Append Entries Code here 
-            SetAlarm(electionTimeout);
-        }
-        
-		void replicateEntries() {
-            SetAlarm(heartbeatInterval);
-            // TODO: Replicate to others
-        }
-        
-		void BecomeLeader() {
-            // TODO: Become Leader Code here
-			nodeState = LEADER;
-            SetAlarm(heartbeatInterval);
-        }
-        
-		void BecomeFollower() {
-            nodeState = FOLLOWER;
-        }
-        
-		void BecomeCandidate() {
-            nodeState = CANDIDATE;
-            currentTerm++;
-			dbgprintf("INFO] Become Candidate\n");
+/* Candidate starts a new election */
+void ServerImplementation::runForElection() {
 
-            // TODO: Additional things here
-            ResetElectionTimeout();
-            SetAlarm(electionTimeout);
-            runForElection();
-        }
+    int initialTerm = currentTerm;
 
-        void ResetElectionTimeout() {
-            electionTimeout = minElectionTimeout + (rand() % 
-                (maxElectionTimeout - minElectionTimeout + 1));
+    /* Vote for self - hence 1*/
+    std::atomic<int> votesGained(1);
+    for (int i = 0; i < hostList.size(); i++) {
+        if (hostList[i] != ip) {
+        std::thread(&ServerImplementation::invokeRequestVote, this, hostList[i], &votesGained).detach();
         }
+    }
+    /* OPTIONAL - Can add sleep(electionTimeout */
+
+    while (votesGained <= hostCount/2 && nodeState == ServerIdentity::CANDIDATE &&
+            currentTerm == initialTerm) {
+    }
+
+    if (votesGained > hostCount/2 && nodeState == ServerIdentity::CANDIDATE) {
+        BecomeLeader();
+    }
+}
         
-        void SetAlarm(int after_ms) {
-            if (nodeState == FOLLOWER) {
-                // TODO:
-            }
+void ServerImplementation::invokeRequestVote(string host, atomic<int> *votesGained) {
+    ClientContext context;
+    context.set_deadline(chrono::system_clock::now() + 
+        chrono::milliseconds(heartbeatInterval));
+    // TODO: Request Vote Code here
+}
+        
+void ServerImplementation::invokeAppendEntries(int o_id) {
+    ClientContext context;
+    context.set_deadline(chrono::system_clock::now() + 
+        chrono::milliseconds(heartbeatInterval));
+    // TODO: Append Entries Code here
+}
+        
+void ServerImplementation::requestVote() {
+    // TODO: Request Vote Code here
+    SetAlarm(electionTimeout);
+}
+        
+void ServerImplementation::appendEntries() {
+    // TODO: Append Entries Code here 
+    SetAlarm(electionTimeout);
+}
+        
+void ServerImplementation::replicateEntries() {
+    SetAlarm(ServerImplementation::heartbeatInterval);
+    // TODO: Replicate to others
+}
+        
+void ServerImplementation::BecomeLeader() {
+    // TODO: Become Leader Code here
+    nodeState = ServerIdentity::LEADER;
+    SetAlarm(heartbeatInterval);
+}
+        
+void ServerImplementation::BecomeFollower() {
+    nodeState = ServerIdentity::FOLLOWER;
+}
+        
+/* 
+    Invoked when timeout signal is received - 
+    Increment current term and run for election
 
-            struct itimerval timer;
-            timer.it_value.tv_sec = after_ms / 1000;
-            timer.it_value.tv_usec = 1000 * (after_ms % 1000);
-            timer.it_interval = timer.it_value;
+    TO-DO: Do not invoke if can_vote == false
+*/
 
-            int old_errno = errno;
-            errno = 0;
-			setitimer(ITIMER_REAL, &timer, nullptr);
-            if(errno) {
-				dbgprintf("INFO] Setting timer failed\n");
-            }
-            errno = old_errno;
-            return;
-        }
-};
+void ServerImplementation::BecomeCandidate() {
+    nodeState = ServerIdentity::CANDIDATE;
+    currentTerm++;
+    dbgprintf("INFO] Become Candidate\n");
 
-void RunServer() {
+
+    // TODO: Additional things here
+    ResetElectionTimeout();
+    SetAlarm(electionTimeout);
+    runForElection();
+}
+
+void ServerImplementation::ResetElectionTimeout() {
+    electionTimeout = minElectionTimeout + (rand() % 
+        (maxElectionTimeout - minElectionTimeout + 1));
+}
+
+void ServerImplementation::SetAlarm(int after_ms) {
+    if (nodeState == ServerIdentity::FOLLOWER) {
+        // TODO:
+    }
+
+    struct itimerval timer;
+    timer.it_value.tv_sec = after_ms / 1000;
+    timer.it_value.tv_usec = 1000 * (after_ms % 1000);
+    timer.it_interval = timer.it_value;
+
+    int old_errno = errno;
+    errno = 0;
+    setitimer(ITIMER_REAL, &timer, nullptr);
+    if(errno) {
+        dbgprintf("INFO] Setting timer failed\n");
+    }
+    errno = old_errno;
+    return;
+}
+
+Status ServerImplementation::AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply)
+{
+    return Status::OK;
+}
+Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
+{
+    return Status::OK;
+}
+Status ServerImplementation::AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply)
+{
+    return Status::OK;
+}
+
+
+void RunServer(const std::vector<string>& hostList) {
     string server_address("0.0.0.0:50051");
+
+    /* TO-DO : Initialize GRPC connections to all other servers */
+
     ServerImplementation service;
     ServerBuilder builder;
     builder.SetMaxReceiveMessageSize((1.5 * 1024 * 1024 * 1024));
@@ -231,7 +259,7 @@ void RunServer() {
     unique_ptr<Server> server(builder.BuildAndStart());
 	dbgprintf("INFO] Server is live\n");
 
-    service.serverInit();
+    service.serverInit(server_address, hostList);
     server->Wait();
 }
 
@@ -239,6 +267,7 @@ int main(int argc, char **argv) {
     pthread_t hb_t;
     pthread_create(&hb_t, NULL, StartHB, NULL);
     pthread_join(hb_t, NULL);
-    RunServer();
+    vector<string> hostList;
+    RunServer(hostList);
     return 0;
 }
