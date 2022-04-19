@@ -156,9 +156,11 @@ endforeach()
 foreach(_target
   server )
   add_library(locks "util/locks.cc")
+  add_library(state_helper "util/state_helper.cc")
   add_executable(${_target} "./server/${_target}.cc")
   target_link_libraries(${_target}
     locks
+    state_helper
     keyvalueops_grpc_proto
     comm_grpc_proto
     lb_grpc_proto
