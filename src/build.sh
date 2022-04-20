@@ -16,8 +16,8 @@ cd cmake/build
 echo "${BLUE} Calling cmake ${NOCOLOR}"
 cmake -DCMAKE_PREFIX_PATH=$MY_INSTALL_DIR ../..
 
-echo "${BLUE} Clean build directory ${NOCOLOR}"
-make clean
+# echo "${BLUE} Clean build directory ${NOCOLOR}"
+# make clean
 
 echo "${BLUE} Compiling ${NOCOLOR}"
 make -j 4	

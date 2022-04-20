@@ -35,7 +35,10 @@ using blockstorage::AssertLeadershipRequest;
 using blockstorage::AssertLeadershipReply;
 
 class ServerImplementation final : public Raft::Service {
- public:
+private: 
+  unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
+
+public:
   void Run();
   void Wait();
   void serverInit(string ip, const std::vector<string>& o_hostList);
@@ -52,9 +55,9 @@ class ServerImplementation final : public Raft::Service {
   void runForElection();
   void replicateEntries();
   void invokeRequestVote(string host, std::atomic<int> *votesGained);
-  void invokeAppendEntries(int o_id);
+  void invokeAppendEntries(string node_ip);
   bool requestVote(Raft::Stub* stub);
-  void appendEntries();
+  void appendEntries(Raft::Stub* stub);
 
 
   void BecomeFollower();

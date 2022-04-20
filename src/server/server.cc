@@ -151,7 +151,7 @@ void signalHandler(int signum) {
 void ServerImplementation::serverInit(string ip, const std::vector<string>& o_hostList) {
     
     stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
-    stateHelper.AddCurrentTerm(0);
+    stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
     
     int old_errno = errno;
     errno = 0;
@@ -166,6 +166,9 @@ void ServerImplementation::serverInit(string ip, const std::vector<string>& o_ho
     srand(time(NULL));
     ResetElectionTimeout();
     SetAlarm(electionTimeout);
+
+    // TODO: Remove later
+    if (ip == "0.0.0.0:50000") BecomeLeader();
 }
         
 /* Candidate starts a new election */
@@ -207,12 +210,37 @@ void ServerImplementation::invokeRequestVote(string host, atomic<int> *votesGain
     }
     // TODO: Request Vote Code here
 }
-        
-void ServerImplementation::invokeAppendEntries(int o_id) {
+
+// TODO: Test 
+// Leader makes this call to other nodes  
+// TODO: param should also include log entries  
+void ServerImplementation::invokeAppendEntries(string node_ip) 
+{
+    // context.set_deadline(chrono::system_clock::now() + 
+    //     chrono::milliseconds(heartbeatInterval)); // QUESTION: Do we need this?
+    dbgprintf("[DEBUG]: invokeAppendEntries: Entering function\n");
+    
     ClientContext context;
-    context.set_deadline(chrono::system_clock::now() + 
-        chrono::milliseconds(heartbeatInterval));
-    // TODO: Append Entries Code here
+    AppendEntriesRequest request;
+    AppendEntriesReply reply;
+    Status status;
+    
+    request.set_term(1); // TODO: Set appropriately
+    request.set_leader_id("1"); // TODO: Set appropriately
+    request.set_prev_log_index(1); // TODO: Set appropriately
+    request.set_prev_log_term(1); // TODO: Set appropriately
+    auto data = request.add_log_entry(); // TODO: Set appropriately
+    data->set_log_index(1); // TODO: Set appropriately
+    data->set_key("1"); // TODO: Set appropriately
+    data->set_value("1"); // TODO: Set appropriately
+
+    // TODO: Get stub from a global data structure
+    auto stub = Raft::NewStub(grpc::CreateChannel(node_ip, grpc::InsecureChannelCredentials()));
+
+    status = stub->AppendEntries(&context, request, &reply);
+    dbgprintf("Status ok = %d\n", status.ok());
+    _appendEntriesResponseMap[node_ip] = reply;
+    dbgprintf("[DEBUG]: invokeAppendEntries: Exiting function\n");
 }
         
 bool ServerImplementation::requestVote(Raft::Stub* stub) {
@@ -231,21 +259,46 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
 
     return status.ok()? 1 : 0;
 }
-        
-void ServerImplementation::appendEntries() {
-    // TODO: Append Entries Code here 
-    SetAlarm(electionTimeout);
+
+// QUESTION: Do we need this?   
+void ServerImplementation::appendEntries(Raft::Stub* stub) {
+    // TODO: Append Entries Code here  
+    SetAlarm(electionTimeout); // QUESTION: Is this needed?
 }
-        
-void ServerImplementation::replicateEntries() {
-    SetAlarm(ServerImplementation::heartbeatInterval);
-    // TODO: Replicate to others
+
+// TODO: Add params?
+// Node calls this function after it becomes a leader  
+void ServerImplementation::replicateEntries() 
+{
+    // SetAlarm(ServerImplementation::heartbeatInterval); // QUESTION: Is it needed?
+
+    // TODO: Change this later
+    vector<string> nodes_list;
+    nodes_list.push_back("0.0.0.0:40000");
+    nodes_list.push_back("0.0.0.0:40001");
+
+    for (int i = 0; i < nodes_list.size(); i++) 
+    {
+        if (nodes_list[i] != ip) 
+        {
+            thread(&ServerImplementation::invokeAppendEntries, this, nodes_list[i]).detach();
+        }
+    }
+
+    // TODO: Check majority
+    while (_appendEntriesResponseMap.size() < 2)
+    {
+        dbgprintf("[DEBUG]: Looping\n");
+    }
+    dbgprintf("[DEBUG]: Got 2 responses\n");
 }
         
 void ServerImplementation::BecomeLeader() {
     // TODO: Become Leader Code here
+    stateHelper.SetIdentity(ServerIdentity::CANDIDATE); // TODO: Remove later
     stateHelper.SetIdentity(ServerIdentity::LEADER);
-    SetAlarm(heartbeatInterval);
+    // SetAlarm(heartbeatInterval); // QUESTION: Do we need this?
+    replicateEntries();
 }
         
 void ServerImplementation::BecomeFollower() {
@@ -298,6 +351,7 @@ void ServerImplementation::SetAlarm(int after_ms) {
 
 Status ServerImplementation::AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply)
 {
+    dbgprintf("[DEBUG]: Received AppendEntries RPC\n");
     return Status::OK;
 }
 Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
@@ -310,8 +364,8 @@ Status ServerImplementation::AssertLeadership(ServerContext* context, const Asse
 }
 
 
-void RunServer(const std::vector<string>& hostList) {
-    string server_address("0.0.0.0:50051");
+void RunServer(string my_ip, const std::vector<string>& hostList) {
+    string server_address(my_ip);
 
     /* TO-DO : Initialize GRPC connections to all other servers */
 
@@ -321,23 +375,23 @@ void RunServer(const std::vector<string>& hostList) {
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     unique_ptr<Server> server(builder.BuildAndStart());
-	  dbgprintf("INFO] Server is live\n");
-
+	dbgprintf("INFO] Server is live\n");
     service.serverInit(server_address, hostList);
     server->Wait();
 }
 
 int main(int argc, char **argv) {
-    pthread_t kv_server_t;
-    pthread_t hb_t;
+    // TODO: Uncomment later
+    // pthread_t kv_server_t;
+    // pthread_t hb_t;
     
-    pthread_create(&kv_server_t, NULL, RunKeyValueServer, NULL);
-    pthread_create(&hb_t, NULL, StartHB, NULL);
+    // pthread_create(&kv_server_t, NULL, RunKeyValueServer, NULL);
+    // pthread_create(&hb_t, NULL, StartHB, NULL);
 
-    pthread_join(hb_t, NULL);
-    pthread_join(kv_server_t, NULL);
+    // pthread_join(hb_t, NULL);
+    // pthread_join(kv_server_t, NULL);
     
     vector<string> hostList;
-    RunServer(hostList);
+    RunServer(argv[1], hostList);
     return 0;
 }
