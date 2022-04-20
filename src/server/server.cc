@@ -120,18 +120,22 @@ class LBNodeCommClient {
         request.set_ip(ip);
 
         while(1) {
-          request.set_identity(identity);
-          stream->Write(request);
-          dbgprintf("INFO] SendHeartBeat: sent heartbeat\n");
+            if(!stream->Write(request)) {
+                break;
+            }
+            request.set_identity(identity);
+            stream->Write(request);
+            dbgprintf("INFO] SendHeartBeat: sent heartbeat\n");
 
-          stream->Read(&reply);
-          dbgprintf("[INFO] SendHeartBeat: recv heartbeat response\n");
+            stream->Read(&reply);
+            dbgprintf("[INFO] SendHeartBeat: recv heartbeat response\n");
           
-          // TODO : Parse reply to get sys state
+            // TODO : Parse reply to get sys state
 
-          dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
-          sleep(HB_SLEEP_IN_SEC);
+            dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
+            sleep(HB_SLEEP_IN_SEC);
         }
+        dbgprintf("[INFO] stream broke\n");
     }
 };
 
