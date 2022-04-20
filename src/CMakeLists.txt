@@ -152,12 +152,23 @@ foreach(_target
     ${_PROTOBUF_LIBPROTOBUF})
 endforeach()
 
+add_library(term_vote_persistence "util/term_vote_persistent.cc")
+add_library(term_vote_volatile "util/term_vote_volatile.cc")
+add_library(replicated_log_persistent "util/replicated_log_persistent.cc")
+add_library(replicated_log_volatile "util/replicated_log_volatile.cc")
+add_library(state_volatile "util/state_volatile.cc")
+add_library(state_helper "util/state_helper.cc")
+target_link_libraries(state_helper
+    term_vote_persistence
+    term_vote_volatile
+    replicated_log_persistent
+    replicated_log_volatile
+    state_volatile)
 
 # Server
 foreach(_target
   server )
   add_library(locks "util/locks.cc")
-  add_library(state_helper "util/state_helper.cc")
   add_executable(${_target} "./server/${_target}.cc")
   target_link_libraries(${_target}
     locks
