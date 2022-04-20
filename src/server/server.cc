@@ -225,7 +225,7 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
     ReqVoteReply reply;
     ClientContext context;
 
-    Status status = stub->ReqVote(&context, req, &reply);
+    grpc::Status status = stub->ReqVote(&context, req, &reply);
 
     SetAlarm(electionTimeout);
 
