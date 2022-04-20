@@ -46,7 +46,7 @@ using grpc::Status;
 using grpc::Service;
 using grpc::ClientContext;
 using grpc::ClientReaderWriter;
-using namespace blockstorage;
+using namespace kvstore;
 using namespace std;
 
 

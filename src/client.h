@@ -19,11 +19,11 @@ using namespace std;
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
-using blockstorage::PutRequest;
-using blockstorage::PutReply;
-using blockstorage::GetRequest;
-using blockstorage::GetReply;
-using blockstorage::KeyValueOps;
+using kvstore::PutRequest;
+using kvstore::PutReply;
+using kvstore::GetRequest;
+using kvstore::GetReply;
+using kvstore::KeyValueOps;
 
 using namespace std;
 

@@ -17,10 +17,10 @@ using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
 
-using blockstorage::GetRequest;
-using blockstorage::GetReply;
-using blockstorage::PutRequest;
-using blockstorage::PutReply;
+using kvstore::GetRequest;
+using kvstore::GetReply;
+using kvstore::PutRequest;
+using kvstore::PutReply;
 
 /******************************************************************************
  * DRIVER

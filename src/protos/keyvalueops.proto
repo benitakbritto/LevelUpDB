@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package blockstorage;
+package kvstore;
 
 service KeyValueOps
 {

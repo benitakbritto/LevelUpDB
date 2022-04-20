@@ -26,13 +26,13 @@ using grpc::Status;
 using grpc::Server;
 using grpc::ServerContext;
 using grpc::ServerCompletionQueue;
-using blockstorage::Raft;
-using blockstorage::AppendEntriesRequest;
-using blockstorage::AppendEntriesReply;
-using blockstorage::ReqVoteRequest;
-using blockstorage::ReqVoteReply;
-using blockstorage::AssertLeadershipRequest;
-using blockstorage::AssertLeadershipReply;
+using kvstore::Raft;
+using kvstore::AppendEntriesRequest;
+using kvstore::AppendEntriesReply;
+using kvstore::ReqVoteRequest;
+using kvstore::ReqVoteReply;
+using kvstore::AssertLeadershipRequest;
+using kvstore::AssertLeadershipReply;
 
 class ServerImplementation final : public Raft::Service {
  public:
