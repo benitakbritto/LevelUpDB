@@ -2,9 +2,10 @@ cmake_minimum_required(VERSION 3.5.1)
 
 project(BlockStorage C CXX)
 add_subdirectory(third_party/leveldb)
-add_executable(runscript util/levelDBWrapper.cc)
-target_link_libraries(runscript PUBLIC leveldb)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../common.cmake)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/common" ${CMAKE_MODULE_PATH})
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/common/common.cmake)
 
 # Proto files
 
@@ -86,7 +87,7 @@ add_custom_command(
       DEPENDS "${keyvalueops_proto}")
 
 # Include generated *.pb.h files
-include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${LEVELDB_INCLUDE_DIR}")
 
 # Proto file 1
 add_library(comm_grpc_proto
@@ -165,6 +166,7 @@ foreach(_target
     comm_grpc_proto
     lb_grpc_proto
     raft_grpc_proto
+    ${LEVELDB_LIBRARY}
     ${_REFLECTION}
     ${_GRPC_GRPCPP}
     ${_PROTOBUF_LIBPROTOBUF})

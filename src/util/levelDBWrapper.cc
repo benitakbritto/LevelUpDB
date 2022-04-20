@@ -11,6 +11,6 @@ Status LevelDBWrapper::Put(string key, string value) {
 //Test
 int main(){
     LevelDBWrapper levelDBWrapper;
-    Status s = levelDBWrapper.Put("k1","v1");
-    if (!s.ok()) cerr << s.ToString() << endl;
+    // Status s = levelDBWrapper.Put("k1","v1");
+    // if (!s.ok()) cerr << s.ToString() << endl;
 }

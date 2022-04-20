@@ -33,7 +33,7 @@
 
 #include "server.h"
 #include "lb.grpc.pb.h"
-
+#include "../util/levelDBWrapper.h"
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -72,14 +72,14 @@ string lb_addr = "0.0.0.0:50056";
 class KeyValueOpsServiceImpl final : public KeyValueOps::Service {
 
     public:
-        Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override {
-            dbgprintf("reached server\n");
-            return Status::OK;
+        grpc::Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override {
+            
+            return grpc::Status::OK;
         }
 
-        Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override {
+        grpc::Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override {
             dbgprintf("reached server\n");
-            return Status::OK;
+            return grpc::Status::OK;
         }
 
 };
@@ -278,17 +278,17 @@ void ServerImplementation::SetAlarm(int after_ms) {
     return;
 }
 
-Status ServerImplementation::AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply)
+grpc::Status ServerImplementation::AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply)
 {
-    return Status::OK;
+    return grpc::Status::OK;
 }
-Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
+grpc::Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
 {
-    return Status::OK;
+    return grpc::Status::OK;
 }
-Status ServerImplementation::AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply)
+grpc::Status ServerImplementation::AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply)
 {
-    return Status::OK;
+    return grpc::Status::OK;
 }
 
 

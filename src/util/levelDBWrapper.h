@@ -24,13 +24,13 @@ class LevelDBWrapper {
     public:
     LevelDBWrapper(){
         options.create_if_missing = true;
-        Status status = DB::Open(options, "/tmp/testdb", &db);
+        leveldb::Status status = DB::Open(options, "/tmp/testdb", &db);
         assert(status.ok());
         write_options.sync = true;
     }
    
-   Status Get(string key, string &value);
-   Status Put(string key, string value);
+   leveldb::Status Get(string key, string &value);
+   leveldb::Status Put(string key, string value);
 };
 
 #endif
