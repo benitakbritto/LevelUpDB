@@ -239,8 +239,7 @@ void ServerImplementation::invokeRequestVote(string host, atomic<int> *_votesGai
 
 // TODO: Test 
 // Leader makes this call to other nodes  
-// TODO: param should also include log entries  
-void ServerImplementation::invokeAppendEntries(string node_ip) 
+void ServerImplementation::invokeAppendEntries(string followerIp) 
 {
     // context.set_deadline(chrono::system_clock::now() + 
     //     chrono::milliseconds(_heartbeatInterval)); // QUESTION: Do we need this?
@@ -251,22 +250,26 @@ void ServerImplementation::invokeAppendEntries(string node_ip)
     AppendEntriesReply reply;
     Status status;
     
-    // TODO: Use state helper
-    request.set_term(1); // TODO: Set appropriately
-    request.set_leader_id("1"); // TODO: Set appropriately
-    request.set_prev_log_index(1); // TODO: Set appropriately
-    request.set_prev_log_term(1); // TODO: Set appropriately
+    request.set_term(_stateHelper.GetCurrentTerm()); 
+    request.set_leader_id(_myIp); 
+    
+    prevLogIndex = _stateHelper.GetLogLength()-1;
+    request.set_prev_log_index(prevLogIndex); 
+    
+    prevLogTerm = _stateHelper.GetTermAtIndex(prevLogIndex)
+    request.set_prev_log_term(prevLogTerm);
+
     auto data = request.add_log_entry(); // TODO: Set appropriately
     data->set_log_index(1); // TODO: Set appropriately
-    data->set_key("1"); // TODO: Set appropriately
+    data->set_key(1); // TODO: Set appropriately
     data->set_value("1"); // TODO: Set appropriately
 
     // TODO: Get stub from a global data structure
-    auto stub = Raft::NewStub(grpc::CreateChannel(node_ip, grpc::InsecureChannelCredentials()));
+    auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
 
     status = stub->AppendEntries(&context, request, &reply);
     dbgprintf("Status ok = %d\n", status.ok());
-    _appendEntriesResponseMap[node_ip] = reply;
+    _appendEntriesResponseMap[followerIp] = reply;
     dbgprintf("[DEBUG]: invokeAppendEntries: Exiting function\n");
 }
         
