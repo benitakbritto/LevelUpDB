@@ -172,7 +172,23 @@ void ServerImplementation::serverInit(string ip, const std::vector<string>& o_ho
     // TODO: Remove later
     if (ip == "0.0.0.0:50000") BecomeLeader();
 }
-        
+
+bool ServerImplementation::checkMajority() {
+    int countSuccess = 0;
+    for (auto& it: _appendEntriesResponseMap) {
+        AppendEntriesReply replyReceived = it.second;
+        if(replyReceived.success()) 
+        {
+            countSuccess++;
+            if(2 * countSuccess == hostList.size())
+            {
+                return true; // break on receiving majority
+            }
+        }
+    }
+    return false;
+}
+
 /* Candidate starts a new election */
 void ServerImplementation::runForElection() {
 
@@ -274,6 +290,10 @@ void ServerImplementation::replicateEntries()
     nodes_list.push_back("0.0.0.0:40000");
     nodes_list.push_back("0.0.0.0:40001");
 
+    // TODO: init stubs properly
+    stubs["0.0.0.0:40000"] = Raft::NewStub(grpc::CreateChannel("0.0.0.0:40000", grpc::InsecureChannelCredentials()));
+    stubs["0.0.0.0:40001"] = Raft::NewStub(grpc::CreateChannel("0.0.0.0:40001", grpc::InsecureChannelCredentials()));
+
     for (int i = 0; i < nodes_list.size(); i++) 
     {
         // TODO: Use get my ip instead of the var ip
@@ -283,12 +303,11 @@ void ServerImplementation::replicateEntries()
         }
     }
 
-    // TODO: Add majority helper here
-    while (_appendEntriesResponseMap.size() < 2)
-    {
-        dbgprintf("[DEBUG]: Looping\n");
+    // QUESTION: Is there a case where the leader fails to reach majority???
+    while(!checkMajority()){
+        // keep waiting
     }
-    dbgprintf("[DEBUG]: Got 2 responses\n");
+
 }
         
 void ServerImplementation::BecomeLeader() {
@@ -296,10 +315,14 @@ void ServerImplementation::BecomeLeader() {
     stateHelper.SetIdentity(ServerIdentity::CANDIDATE); // TODO: Remove later
     stateHelper.SetIdentity(ServerIdentity::LEADER);
 
-    // TODO: Init next index to leader's last index
-
+    setNextIndexToLeaderLastIndex();
     // SetAlarm(heartbeatInterval); // QUESTION: Do we need this?
     replicateEntries();
+}
+
+void ServerImplementation::setNextIndexToLeaderLastIndex() {
+    int leaderLastIndex =  stateHelper.GetNextIndex(ip);
+    stateHelper.SetNextIndex(ip, leaderLastIndex);
 }
         
 void ServerImplementation::BecomeFollower() {

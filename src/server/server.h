@@ -36,7 +36,9 @@ using blockstorage::AssertLeadershipReply;
 
 class ServerImplementation final : public Raft::Service {
 private: 
-  unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
+    unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
+    bool checkMajority();
+    void setNextIndexToLeaderLastIndex();
 
 public:
   void Run();
