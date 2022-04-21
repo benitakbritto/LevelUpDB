@@ -48,6 +48,8 @@ using grpc::ClientContext;
 using grpc::ClientReaderWriter;
 using namespace blockstorage;
 using namespace std;
+using grpc::StatusCode;
+
 
 
 /******************************************************************************
@@ -246,10 +248,10 @@ void ServerImplementation::invokeAppendEntries(string node_ip)
     // context.set_deadline(chrono::system_clock::now() + 
     //     chrono::milliseconds(_heartbeatInterval)); // QUESTION: Do we need this?
     
-    ClientContext context;
     AppendEntriesRequest request;
     AppendEntriesReply reply;
     Status status;
+    int retryCount = 0;
     
     // TODO: Use state helper
     request.set_term(1); // TODO: Set appropriately
@@ -264,9 +266,40 @@ void ServerImplementation::invokeAppendEntries(string node_ip)
     // TODO: Get stub from a global data structure
     auto stub = Raft::NewStub(grpc::CreateChannel(node_ip, grpc::InsecureChannelCredentials()));
 
-    status = stub->AppendEntries(&context, request, &reply);
+    // Retry w backoff
+    do
+    {
+        ClientContext context;
+        reply.Clear();
+        sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
+        
+        status = stub->AppendEntries(&context, request, &reply);
+        
+        retryCount++;
+    } while (status.error_code() == StatusCode::UNAVAILABLE);
+
     dbgprintf("Status ok = %d\n", status.ok());
     _appendEntriesResponseMap[node_ip] = reply;
+
+    // Check the reply of the RPC
+    if (request.term() < reply.term())
+    {
+        // Leader becomes follower
+        becomeFollower();
+        // TODO: Stop this function
+    }
+    // TODO: Retry RPC with different next index
+    else if (reply.success() == false)
+    {
+       
+    }
+    // AppendEntries was successful for node
+    else if (reply.success() == true)
+    {
+        _stateHelper.SetMatchIndex(node_ip, _stateHelper.GetLogLength() - 1);
+    }
+
+
     dbgprintf("[DEBUG]: invokeAppendEntries: Exiting function\n");
 }
         
@@ -305,6 +338,12 @@ void ServerImplementation::replicateEntries()
         {
             thread(&ServerImplementation::invokeAppendEntries, this, nodes_list[i]).detach();
         }
+    }
+    
+    // Stop this function if leader learns that it no longer is the leader
+    if (_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER)
+    {
+        return;
     }
 
     // QUESTION: Is there a case where the leader fails to reach majority???

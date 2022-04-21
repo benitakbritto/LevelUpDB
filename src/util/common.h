@@ -20,6 +20,8 @@ enum ServerIdentity { LEADER, FOLLOWER, CANDIDATE};
 #define HB_SLEEP_IN_SEC             5
 #define LEADER_STR                  "LEADER"
 #define FOLLOWER_STR                "FOLLOWER"
+#define RETRY_TIME_START             1                                     
+#define RETRY_TIME_MULTIPLIER        2                                    
 
 /******************************************************************************
  * NAMESPACES
