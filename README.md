@@ -23,7 +23,7 @@ Follow the commands mentioned [here](https://github.com/google/leveldb#getting-t
 ### Run
 ```
 ./loadbalancer
-./server
+./server <server addr>
 ./keyvalue_client
 ```
 

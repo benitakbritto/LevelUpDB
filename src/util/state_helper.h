@@ -72,6 +72,8 @@ public:
     int GetLogLength();
     int GetTermAtIndex(int index);
 
+    // TODO: Expose GetKeyAtIndex, GetValueAtIndex
+
     // Volatile - All servers
     void SetCommitIndex(int index);
     int GetCommitIndex();
