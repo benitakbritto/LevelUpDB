@@ -97,42 +97,42 @@ void *RunKeyValueServer(void* args) {
 }
 
 class LBNodeCommClient {
-  private:
-    unique_ptr<LBNodeComm::Stub> stub_;
-    int identity;
-    string ip;
+    private:
+        unique_ptr<LBNodeComm::Stub> stub_;
+        int identity;
+        string ip;
   
-  public:
-    LBNodeCommClient(string target_str, int _identity, string _ip) {
-      identity = _identity;
-      stub_ = LBNodeComm::NewStub(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
-      ip = _ip;
-    }
-
-    void SendHeartBeat() {
-        ClientContext context;
-        
-        std::shared_ptr<ClientReaderWriter<HeartBeatRequest, HeartBeatReply> > stream(
-            stub_->SendHeartBeat(&context));
-
-        HeartBeatReply reply;
-        HeartBeatRequest request;
-        request.set_ip(ip);
-
-        while(1) {
-          request.set_identity(identity);
-          stream->Write(request);
-          dbgprintf("INFO] SendHeartBeat: sent heartbeat\n");
-
-          stream->Read(&reply);
-          dbgprintf("[INFO] SendHeartBeat: recv heartbeat response\n");
-          
-          // TODO : Parse reply to get sys state
-
-          dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
-          sleep(HB_SLEEP_IN_SEC);
+    public:
+        LBNodeCommClient(string target_str, int _identity, string _ip) {
+            identity = _identity;
+            stub_ = LBNodeComm::NewStub(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
+            ip = _ip;
         }
-    }
+
+        void SendHeartBeat() {
+            ClientContext context;
+            
+            std::shared_ptr<ClientReaderWriter<HeartBeatRequest, HeartBeatReply> > stream(
+                stub_->SendHeartBeat(&context));
+
+            HeartBeatReply reply;
+            HeartBeatRequest request;
+            request.set_ip(ip);
+
+            while(1) {
+                request.set_identity(identity);
+                stream->Write(request);
+                dbgprintf("INFO] SendHeartBeat: sent heartbeat\n");
+
+                stream->Read(&reply);
+                dbgprintf("[INFO] SendHeartBeat: recv heartbeat response\n");
+                
+                // TODO : Parse reply to get sys state
+
+                dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
+                sleep(HB_SLEEP_IN_SEC);
+            }
+        }
 };
 
 void *StartHB(void* args) {
