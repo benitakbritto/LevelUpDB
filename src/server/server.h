@@ -36,45 +36,47 @@ using blockstorage::AssertLeadershipReply;
 
 class ServerImplementation final : public Raft::Service {
 private: 
-    unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
-    bool checkMajority();
-    void setNextIndexToLeaderLastIndex();
+  unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
+  MutexMap _lockHelper;
+  string _myIp;
+  StateHelper _stateHelper;
+  std::map<string,std::unique_ptr<Raft::Stub>> _stubs;
+  const std::vector<std::string> _hostList;
+  int _hostCount;
+  int _votesGained;
+  int _electionTimeout;
+
+  int _minElectionTimeout = 800;
+  int _maxElectionTimeout = 1600;
+  int _heartbeatInterval = 50;
+
+  void setAlarm(int after_us);
+  void resetElectionTimeout();
+
+  void runForElection();
+  void invokeRequestVote(string host, std::atomic<int> *votesGained);
+  bool requestVote(Raft::Stub* stub);
+
+  void replicateEntries();
+  void invokeAppendEntries(string node_ip);
+
+  void becomeFollower();
+  void becomeCandidate();
+  void becomeLeader();
+
+  bool checkMajority();
+  void setNextIndexToLeaderLastIndex();
 
 public:
+  void SetMyIp(string ip);
+  string GetMyIp();
   void Run();
   void Wait();
-  void serverInit(string ip, const std::vector<string>& o_hostList);
-  MutexMap lockHelper;
-  string ip;
-  StateHelper stateHelper;
-  std::map<string,std::unique_ptr<Raft::Stub>> stubs;
-  const std::vector<std::string> hostList;
-
+  void ServerInit(const std::vector<string>& o_hostList);
+  
   Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
   Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
   Status AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply) override;
-
-  void runForElection();
-  void replicateEntries();
-  void invokeRequestVote(string host, std::atomic<int> *votesGained);
-  void invokeAppendEntries(string node_ip);
-  bool requestVote(Raft::Stub* stub);
-
-
-  void BecomeFollower();
-  void BecomeCandidate();
-  void BecomeLeader();
-
-  void SetAlarm(int after_us);
-  void ResetElectionTimeout();
-
-  int hostCount;
-  int votesGained;
-  int electionTimeout;
-
-  int minElectionTimeout = 800;
-  int maxElectionTimeout = 1600;
-  int heartbeatInterval = 50;
 };
 
 #endif
