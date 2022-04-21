@@ -150,6 +150,8 @@ void signalHandler(int signum) {
 
 void ServerImplementation::serverInit(string ip, const std::vector<string>& o_hostList) {
     
+    // TODO: Set my_ip
+    
     stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
     stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
     
@@ -225,6 +227,7 @@ void ServerImplementation::invokeAppendEntries(string node_ip)
     AppendEntriesReply reply;
     Status status;
     
+    // TODO: Use state helper
     request.set_term(1); // TODO: Set appropriately
     request.set_leader_id("1"); // TODO: Set appropriately
     request.set_prev_log_index(1); // TODO: Set appropriately
@@ -260,12 +263,6 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
     return status.ok()? 1 : 0;
 }
 
-// QUESTION: Do we need this?   
-void ServerImplementation::appendEntries(Raft::Stub* stub) {
-    // TODO: Append Entries Code here  
-    SetAlarm(electionTimeout); // QUESTION: Is this needed?
-}
-
 // TODO: Add params?
 // Node calls this function after it becomes a leader  
 void ServerImplementation::replicateEntries() 
@@ -279,13 +276,14 @@ void ServerImplementation::replicateEntries()
 
     for (int i = 0; i < nodes_list.size(); i++) 
     {
+        // TODO: Use get my ip instead of the var ip
         if (nodes_list[i] != ip) 
         {
             thread(&ServerImplementation::invokeAppendEntries, this, nodes_list[i]).detach();
         }
     }
 
-    // TODO: Check majority
+    // TODO: Add majority helper here
     while (_appendEntriesResponseMap.size() < 2)
     {
         dbgprintf("[DEBUG]: Looping\n");
@@ -297,6 +295,9 @@ void ServerImplementation::BecomeLeader() {
     // TODO: Become Leader Code here
     stateHelper.SetIdentity(ServerIdentity::CANDIDATE); // TODO: Remove later
     stateHelper.SetIdentity(ServerIdentity::LEADER);
+
+    // TODO: Init next index to leader's last index
+
     // SetAlarm(heartbeatInterval); // QUESTION: Do we need this?
     replicateEntries();
 }
@@ -351,6 +352,7 @@ void ServerImplementation::SetAlarm(int after_ms) {
 
 Status ServerImplementation::AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply)
 {
+    // TODO: Case 1: leader term < my term
     dbgprintf("[DEBUG]: Received AppendEntries RPC\n");
     return Status::OK;
 }

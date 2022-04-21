@@ -57,7 +57,6 @@ public:
   void invokeRequestVote(string host, std::atomic<int> *votesGained);
   void invokeAppendEntries(string node_ip);
   bool requestVote(Raft::Stub* stub);
-  void appendEntries(Raft::Stub* stub);
 
 
   void BecomeFollower();
