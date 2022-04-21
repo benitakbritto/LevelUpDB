@@ -119,6 +119,26 @@ int StateHelper::GetTermAtIndex(int index)
 }
 
 /*
+*   @brief Get the key of the command at the specified index
+*
+*   @param index
+*/
+string StateHelper::GetKeyAtIndex(int index)
+{
+    return vReplicatedLogObj.GetKey(index);
+}
+
+/*
+*   @brief Get the value of the command at the specified index
+*
+*   @param index
+*/
+string StateHelper::GetValueAtIndex(int index)
+{
+    return vReplicatedLogObj.GetValue(index);
+}
+
+/*
 *   @brief Parse logs
 */
 void StateHelper::Init()
