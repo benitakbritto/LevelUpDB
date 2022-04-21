@@ -188,7 +188,7 @@ bool ServerImplementation::checkMajority() {
         if(replyReceived.success()) 
         {
             countSuccess++;
-            if(2 * countSuccess == hostList.size())
+            if(2 * countSuccess == _hostList.size())
             {
                 return true; // break on receiving majority
             }
@@ -324,8 +324,8 @@ void ServerImplementation::becomeLeader() {
 }
 
 void ServerImplementation::setNextIndexToLeaderLastIndex() {
-    int leaderLastIndex =  stateHelper.GetNextIndex(ip);
-    stateHelper.SetNextIndex(ip, leaderLastIndex);
+    int leaderLastIndex =  _stateHelper.GetNextIndex(_myIp);
+    _stateHelper.SetNextIndex(_myIp, leaderLastIndex);
 }
         
 void ServerImplementation::becomeFollower() {
