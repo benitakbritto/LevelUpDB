@@ -38,12 +38,13 @@ class ServerImplementation final : public Raft::Service {
  public:
   void Run();
   void Wait();
-  void serverInit(string ip, const std::vector<string>& o_hostList);
+  void serverInit(string ip);
   MutexMap lockHelper;
   string ip;
   StateHelper stateHelper;
   std::map<string,std::unique_ptr<Raft::Stub>> stubs;
-  const std::vector<std::string> hostList;
+  vector<string> hostList;
+  std::atomic<int> votesGained;
 
   Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
   Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
@@ -51,11 +52,15 @@ class ServerImplementation final : public Raft::Service {
 
   void runForElection();
   void replicateEntries();
-  void invokeRequestVote(string host, std::atomic<int> *votesGained);
+  void invokeRequestVote(string host);
   void invokeAppendEntries(int o_id);
   bool requestVote(Raft::Stub* stub);
   void appendEntries();
+  void AlarmCallback();
 
+  void LeaderHB();
+  void sendLeaderHB(Raft::Stub* stub);
+  void invokeLeaderHB(string host);
 
   void BecomeFollower();
   void BecomeCandidate();
@@ -64,12 +69,10 @@ class ServerImplementation final : public Raft::Service {
   void SetAlarm(int after_us);
   void ResetElectionTimeout();
 
-  int hostCount;
-  int votesGained;
   int electionTimeout;
 
-  int minElectionTimeout = 800;
-  int maxElectionTimeout = 1600;
+  int minElectionTimeout = 8000;
+  int maxElectionTimeout = 16000;
   int heartbeatInterval = 50;
 };
 

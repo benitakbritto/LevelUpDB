@@ -148,24 +148,37 @@ void *StartHB(void* args) {
     return NULL;
 }
 
+ServerImplementation* signalHandlerService;
 void signalHandler(int signum) {
+    signalHandlerService->AlarmCallback();
 	return;
 }
 
-void ServerImplementation::serverInit(string ip, const std::vector<string>& o_hostList) {
+void ServerImplementation::serverInit(string server_address) {
     
+    hostList = {"0.0.0.0:50051", "0.0.0.0:50052", "0.0.0.0:50053"};
+    ip = server_address;
+
     stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+
+    //Initialize states
     stateHelper.AddCurrentTerm(0);
-    
+    stateHelper.SetCommitIndex(0);
+    stateHelper.SetLastAppliedIndex(0);
+    stateHelper.Append(0, "NULL", "NULL"); // To-Do: Need some initial data on file creation. Not a problem if file already exists.
+
     int old_errno = errno;
     errno = 0;
+    cout<<"[INIT] Server Init"<<endl;
     signal(SIGALRM, &signalHandler);
-    
     if (errno) {
-        dbgprintf("ERROR] Signal could not be set\n");
+        dbgprintf("[ERROR] Signal could not be set\n");
         errno = old_errno;
         return;
     }
+
+    signalHandlerService = this;
+
     errno = old_errno;
     srand(time(NULL));
     ResetElectionTimeout();
@@ -173,33 +186,41 @@ void ServerImplementation::serverInit(string ip, const std::vector<string>& o_ho
 }
         
 /* Candidate starts a new election */
-void ServerImplementation::runForElection() {
+void ServerImplementation::runForElection() {   
 
+    cout<<"[INFO]: Running for election"<<endl;
     int initialTerm = stateHelper.GetCurrentTerm();
 
+    stateHelper.AddCurrentTerm(stateHelper.GetCurrentTerm() + 1);
+
     /* Vote for self - hence 1*/
-    std::atomic<int> votesGained(1);
+    votesGained = 1;
+    stateHelper.AddVotedFor(stateHelper.GetCurrentTerm(),ip);
+
+    /*Reset Election Timer*/
+    ResetElectionTimeout();
+    SetAlarm(electionTimeout);
+
+    /* Send RequestVote RPCs to all servers */
     for (int i = 0; i < hostList.size(); i++) {
         if (hostList[i] != ip) {
-        std::thread(&ServerImplementation::invokeRequestVote, this, hostList[i], &votesGained).detach();
+            std::thread(&ServerImplementation::invokeRequestVote, this, hostList[i]).detach();
         }
     }
-    /* OPTIONAL - Can add sleep(electionTimeout */
-    sleep(1); //election timeout
-    // while (votesGained <= hostCount/2 && nodeState == ServerIdentity::CANDIDATE &&
-    //         currentTerm == initialTerm) {
-    // }
 
-    if (votesGained > hostCount/2 && stateHelper.GetCurrentTerm() == ServerIdentity::CANDIDATE) {
+    sleep(2);
+    //cout<<"Woken up: " <<votesGained<<endl;
+    if (votesGained > hostList.size()/2 && stateHelper.GetIdentity() == ServerIdentity::CANDIDATE) {
+        cout<<"[INFO] Candidate received majority of "<<votesGained<<endl;
+        cout<<"[INFO] Change Role to LEADER for term"<<stateHelper.GetCurrentTerm()<<endl;
         BecomeLeader();
     }
 }
         
-void ServerImplementation::invokeRequestVote(string host, atomic<int> *votesGained) {
-    ClientContext context;
-    context.set_deadline(chrono::system_clock::now() + 
-        chrono::milliseconds(heartbeatInterval));
+void ServerImplementation::invokeRequestVote(string host) {
 
+    cout<<"[INFO]: Sending Request Vote to "<<host;
+    
     if(stubs[host].get()==nullptr)
     {
         stubs[host] = Raft::NewStub(grpc::CreateChannel(host, grpc::InsecureChannelCredentials()));
@@ -209,7 +230,6 @@ void ServerImplementation::invokeRequestVote(string host, atomic<int> *votesGain
     {
         votesGained++;
     }
-    // TODO: Request Vote Code here
 }
         
 void ServerImplementation::invokeAppendEntries(int o_id) {
@@ -224,16 +244,20 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
     req.set_term(stateHelper.GetCurrentTerm());
     req.set_candidateid(ip);
     req.set_lastlogindex(stateHelper.GetLogLength());
-    req.set_lastlogterm(stateHelper.GetTermAtIndex(stateHelper.GetLogLength() - 1));
-
+    req.set_lastlogterm(stateHelper.GetTermAtIndex(stateHelper.GetLogLength()-1));
     ReqVoteReply reply;
     ClientContext context;
+    context.set_deadline(chrono::system_clock::now() + 
+        chrono::milliseconds(heartbeatInterval));
 
     grpc::Status status = stub->ReqVote(&context, req, &reply);
 
     SetAlarm(electionTimeout);
 
-    return status.ok()? 1 : 0;
+    if(status.ok() && reply.votegrantedfor())
+        return true;
+    
+    return false;
 }
         
 void ServerImplementation::appendEntries() {
@@ -250,6 +274,46 @@ void ServerImplementation::BecomeLeader() {
     // TODO: Become Leader Code here
     stateHelper.SetIdentity(ServerIdentity::LEADER);
     SetAlarm(heartbeatInterval);
+    std::thread(&ServerImplementation::LeaderHB, this).detach();
+}
+
+void ServerImplementation::LeaderHB()
+{
+    //To-DO: Make it threaded not sequential.
+    while(stateHelper.GetIdentity() == ServerIdentity::LEADER)
+    {
+        for(int i=0; i<hostList.size(); i++)
+        {
+            if(hostList[i]!=ip)
+                ServerImplementation::invokeLeaderHB(hostList[i]);
+                //std::thread(&ServerImplementation::invokeLeaderHB, this, hostList[i]).detach();
+        }
+        sleep(heartbeatInterval);
+    }
+}
+
+void ServerImplementation::invokeLeaderHB(string host)
+{
+    if(stubs[host].get()==nullptr)
+    {
+        stubs[host] = Raft::NewStub(grpc::CreateChannel(host, grpc::InsecureChannelCredentials()));
+    }
+    if(host!=ip)
+    {
+        sendLeaderHB(stubs[host].get());
+    }
+}
+
+void ServerImplementation::sendLeaderHB(Raft::Stub* stub)
+{
+    AssertLeadershipRequest request;
+    AssertLeadershipReply reply;
+    ClientContext context;
+
+    request.set_leaderid(ip);
+
+    stub->AssertLeadership(&context, request, &reply);
+
 }
         
 void ServerImplementation::BecomeFollower() {
@@ -258,21 +322,22 @@ void ServerImplementation::BecomeFollower() {
         
 /* 
     Invoked when timeout signal is received - 
-    Increment current term and run for election
-
-    TO-DO: Do not invoke if can_vote == false
 */
 
 void ServerImplementation::BecomeCandidate() {
     stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
-    stateHelper.AddCurrentTerm(stateHelper.GetCurrentTerm() + 1);
     dbgprintf("INFO] Become Candidate\n");
-
-
-    // TODO: Additional things here
     ResetElectionTimeout();
     SetAlarm(electionTimeout);
     runForElection();
+}
+
+void ServerImplementation::AlarmCallback() {
+  if (stateHelper.GetIdentity() == ServerIdentity::LEADER) {
+    //ReplicateEntries();
+  } else {
+    BecomeCandidate();
+  }
 }
 
 void ServerImplementation::ResetElectionTimeout() {
@@ -304,18 +369,65 @@ grpc::Status ServerImplementation::AppendEntries(ServerContext* context, const A
 {
     return grpc::Status::OK;
 }
+
 grpc::Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
 {
-    return grpc::Status::OK;
+    cout<<"Received reqvote from "<<request->candidateid()<<" --- "<<request->term()<<endl;
+
+    reply->set_votegrantedfor(false);
+    reply->set_term(stateHelper.GetCurrentTerm());
+
+    if(request->term() < stateHelper.GetCurrentTerm())
+    {
+        return grpc::Status::OK;
+    }
+
+    if(request->term() > stateHelper.GetCurrentTerm())
+    {
+        stateHelper.AddCurrentTerm(request->term());
+        stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    }
+
+    if(stateHelper.GetVotedFor(request->term())=="" || stateHelper.GetVotedFor(request->term()) == request->candidateid())
+    {
+        if(request->lastlogterm() > stateHelper.GetTermAtIndex(stateHelper.GetLogLength() - 1))
+        {
+            stateHelper.AddVotedFor(request->term(), request->candidateid());
+            reply->set_votegrantedfor(true);
+
+            return grpc::Status::OK;
+        }
+
+        if(request->lastlogterm() == stateHelper.GetTermAtIndex(stateHelper.GetLogLength() - 1))
+        {
+            if(request->lastlogindex() > stateHelper.GetLogLength()-1)
+            {
+                reply->set_votegrantedfor(true);
+
+                return grpc::Status::OK;
+            }
+        }
+    }
+
+    return grpc::Status::CANCELLED;
 }
+
+
+/* Currently using AssertLeadership as heartbeat from leader to nodes. Will be using AppendEntries */
 grpc::Status ServerImplementation::AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply)
 {
+    cout<<"[INFO]: Received HB from Leader"<<endl;
+
+    stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    ResetElectionTimeout();
+    SetAlarm(electionTimeout);
+    
     return grpc::Status::OK;
 }
 
 
-void RunServer(const std::vector<string>& hostList) {
-    string server_address("0.0.0.0:50051");
+void RunServer(string server_address) {
+    //string server_address("0.0.0.0:50051");
 
     /* TO-DO : Initialize GRPC connections to all other servers */
 
@@ -325,9 +437,9 @@ void RunServer(const std::vector<string>& hostList) {
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     unique_ptr<Server> server(builder.BuildAndStart());
-	  dbgprintf("INFO] Server is live\n");
+	  dbgprintf("[INFO] Server is live\n");
 
-    service.serverInit(server_address, hostList);
+    service.serverInit(server_address);
     server->Wait();
 }
 
@@ -337,11 +449,10 @@ int main(int argc, char **argv) {
     
     pthread_create(&kv_server_t, NULL, RunKeyValueServer, NULL);
     pthread_create(&hb_t, NULL, StartHB, NULL);
+    string ip = argv[1];
+    RunServer(ip);
 
     pthread_join(hb_t, NULL);
     pthread_join(kv_server_t, NULL);
-    
-    vector<string> hostList;
-    RunServer(hostList);
     return 0;
 }
