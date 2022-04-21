@@ -48,6 +48,8 @@ using grpc::ClientContext;
 using grpc::ClientReaderWriter;
 using namespace blockstorage;
 using namespace std;
+using grpc::StatusCode;
+
 
 
 /******************************************************************************
@@ -241,35 +243,68 @@ void ServerImplementation::invokeRequestVote(string host, atomic<int> *_votesGai
 // Leader makes this call to other nodes  
 void ServerImplementation::invokeAppendEntries(string followerIp) 
 {
+    dbgprintf("[DEBUG] invokeAppendEntries: Entering function\n");
     // context.set_deadline(chrono::system_clock::now() + 
     //     chrono::milliseconds(_heartbeatInterval)); // QUESTION: Do we need this?
-    dbgprintf("[DEBUG]: invokeAppendEntries: Entering function\n");
     
-    ClientContext context;
     AppendEntriesRequest request;
     AppendEntriesReply reply;
     Status status;
-    
+    int retryCount = 0;
+    int prevLogIndex;
+    int prevLogTerm;
+
     request.set_term(_stateHelper.GetCurrentTerm()); 
     request.set_leader_id(_myIp); 
     
     prevLogIndex = _stateHelper.GetLogLength()-1;
     request.set_prev_log_index(prevLogIndex); 
     
-    prevLogTerm = _stateHelper.GetTermAtIndex(prevLogIndex)
+    prevLogTerm = _stateHelper.GetTermAtIndex(prevLogIndex);
     request.set_prev_log_term(prevLogTerm);
 
     auto data = request.add_log_entry(); // TODO: Set appropriately
-    data->set_log_index(1); // TODO: Set appropriately
-    data->set_key(1); // TODO: Set appropriately
-    data->set_value("1"); // TODO: Set appropriately
+    // data->set_log_index(1); // TODO: Set appropriately
+    // data->set_key(1); // TODO: Set appropriately
+    // data->set_value("1"); // TODO: Set appropriately
 
     // TODO: Get stub from a global data structure
     auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
 
-    status = stub->AppendEntries(&context, request, &reply);
+    // Retry w backoff
+    do
+    {
+        ClientContext context;
+        reply.Clear();
+        sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
+        
+        status = stub->AppendEntries(&context, request, &reply);
+        
+        retryCount++;
+    } while (status.error_code() == StatusCode::UNAVAILABLE);
+
     dbgprintf("Status ok = %d\n", status.ok());
     _appendEntriesResponseMap[followerIp] = reply;
+
+    // Check the reply of the RPC
+    if (request.term() < reply.term())
+    {
+        // Leader becomes follower
+        becomeFollower();
+        // TODO: Stop this function
+    }
+    // TODO: Retry RPC with different next index
+    else if (reply.success() == false)
+    {
+       
+    }
+    // AppendEntries was successful for node
+    else if (reply.success() == true)
+    {
+        _stateHelper.SetMatchIndex(followerIp, _stateHelper.GetLogLength() - 1);
+    }
+
+
     dbgprintf("[DEBUG]: invokeAppendEntries: Exiting function\n");
 }
         
@@ -294,6 +329,7 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
 // Node calls this function after it becomes a leader  
 void ServerImplementation::replicateEntries() 
 {
+    dbgprintf("[DEBUG] replicateEntries: Entering function\n");
     // setAlarm(_heartbeatInterval); // QUESTION: Is it needed?
 
     // TODO: Change this later
@@ -308,15 +344,22 @@ void ServerImplementation::replicateEntries()
             thread(&ServerImplementation::invokeAppendEntries, this, nodes_list[i]).detach();
         }
     }
+    
+    // Stop this function if leader learns that it no longer is the leader
+    if (_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER)
+    {
+        return;
+    }
 
     // QUESTION: Is there a case where the leader fails to reach majority???
     while(!checkMajority()){
         // keep waiting
     }
-
+    dbgprintf("[DEBUG] replicateEntries: Exiting function\n");
 }
         
 void ServerImplementation::becomeLeader() {
+    dbgprintf("[DEBUG] becomeLeader: Entering function\n");
     // TODO: become Leader Code here
     _stateHelper.SetIdentity(ServerIdentity::CANDIDATE); // TODO: Remove later
     _stateHelper.SetIdentity(ServerIdentity::LEADER);
@@ -324,11 +367,13 @@ void ServerImplementation::becomeLeader() {
     setNextIndexToLeaderLastIndex();
     // SetAlarm(heartbeatInterval); // QUESTION: Do we need this?
     replicateEntries();
+    dbgprintf("[DEBUG] becomeLeader: Exiting function\n");
 }
 
 void ServerImplementation::setNextIndexToLeaderLastIndex() {
-    int leaderLastIndex =  _stateHelper.GetNextIndex(_myIp);
-    _stateHelper.SetNextIndex(_myIp, leaderLastIndex);
+    // TODO: Fix this
+    // int leaderLastIndex =  _stateHelper.GetNextIndex(_myIp);
+    // _stateHelper.SetNextIndex(_myIp, leaderLastIndex);
 }
         
 void ServerImplementation::becomeFollower() {
@@ -379,7 +424,9 @@ void ServerImplementation::setAlarm(int after_ms) {
     return;
 }
 
-Status ServerImplementation::AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply)
+Status ServerImplementation::AppendEntries(ServerContext* context, 
+                                            const AppendEntriesRequest* request, 
+                                            AppendEntriesReply *reply)
 {
     dbgprintf("[DEBUG]: AppendEntries - Entering RPC\n");
     int my_term = 0;
@@ -389,11 +436,32 @@ Status ServerImplementation::AppendEntries(ServerContext* context, const AppendE
     my_term = _stateHelper.GetCurrentTerm();
     if (request->term() < my_term)
     {
+        dbgprintf("[DEBUG]: AppendEntries RPC - In Case 1\n");
         reply->set_term(my_term);
         reply->set_success(false);
         return Status::OK;
     }
-    
+    // TODO: Test Case 1
+    // Case 2: Candidate receives valid AppenEntries RPC
+    else 
+    {
+        dbgprintf("[DEBUG]: AppendEntries RPC - In Case 2a\n");
+        if (ServerIdentity::CANDIDATE)
+        {
+            becomeFollower();
+        }
+
+        // Check if term at log index matches
+        if (_stateHelper.GetTermAtIndex(request->prev_log_index()) != request->prev_log_term())
+        {
+            reply->set_term(my_term);
+            reply->set_success(false);
+            return Status::OK;
+        }
+    }
+
+    // TODO: Other cases
+
     dbgprintf("[DEBUG]: AppendEntries - Exiting RPC\n");
     return Status::OK;
 }
