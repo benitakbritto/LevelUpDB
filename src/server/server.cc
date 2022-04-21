@@ -148,12 +148,20 @@ void signalHandler(int signum) {
 	return;
 }
 
-void ServerImplementation::serverInit(string ip, const std::vector<string>& o_hostList) {
-    
-    // TODO: Set my_ip
-    
-    stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
-    stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
+void ServerImplementation::SetMyIp(string ip)
+{
+    _myIp = ip;
+}
+
+string ServerImplementation::GetMyIp()
+{
+    return _myIp;
+}
+
+
+void ServerImplementation::ServerInit(const std::vector<string>& o_hostList) {    
+    _stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    _stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
     
     int old_errno = errno;
     errno = 0;
@@ -166,49 +174,49 @@ void ServerImplementation::serverInit(string ip, const std::vector<string>& o_ho
     }
     errno = old_errno;
     srand(time(NULL));
-    ResetElectionTimeout();
-    SetAlarm(electionTimeout);
+    resetElectionTimeout();
+    setAlarm(_electionTimeout);
 
     // TODO: Remove later
-    if (ip == "0.0.0.0:50000") BecomeLeader();
+    if (_myIp == "0.0.0.0:50000") becomeLeader();
 }
         
 /* Candidate starts a new election */
 void ServerImplementation::runForElection() {
 
-    int initialTerm = stateHelper.GetCurrentTerm();
+    int initialTerm = _stateHelper.GetCurrentTerm();
 
     /* Vote for self - hence 1*/
-    std::atomic<int> votesGained(1);
-    for (int i = 0; i < hostList.size(); i++) {
-        if (hostList[i] != ip) {
-        std::thread(&ServerImplementation::invokeRequestVote, this, hostList[i], &votesGained).detach();
+    std::atomic<int> _votesGained(1);
+    for (int i = 0; i < _hostList.size(); i++) {
+        if (_hostList[i] != _myIp) {
+        std::thread(&ServerImplementation::invokeRequestVote, this, _hostList[i], &_votesGained).detach();
         }
     }
-    /* OPTIONAL - Can add sleep(electionTimeout */
+    /* OPTIONAL - Can add sleep(_electionTimeout */
     sleep(1); //election timeout
-    // while (votesGained <= hostCount/2 && nodeState == ServerIdentity::CANDIDATE &&
+    // while (_votesGained <= _hostCount/2 && nodeState == ServerIdentity::CANDIDATE &&
     //         currentTerm == initialTerm) {
     // }
 
-    if (votesGained > hostCount/2 && stateHelper.GetCurrentTerm() == ServerIdentity::CANDIDATE) {
-        BecomeLeader();
+    if (_votesGained > _hostCount/2 && _stateHelper.GetCurrentTerm() == ServerIdentity::CANDIDATE) {
+        becomeLeader();
     }
 }
         
-void ServerImplementation::invokeRequestVote(string host, atomic<int> *votesGained) {
+void ServerImplementation::invokeRequestVote(string host, atomic<int> *_votesGained) {
     ClientContext context;
     context.set_deadline(chrono::system_clock::now() + 
-        chrono::milliseconds(heartbeatInterval));
+        chrono::milliseconds(_heartbeatInterval));
 
-    if(stubs[host].get()==nullptr)
+    if(_stubs[host].get()==nullptr)
     {
-        stubs[host] = Raft::NewStub(grpc::CreateChannel(host, grpc::InsecureChannelCredentials()));
+        _stubs[host] = Raft::NewStub(grpc::CreateChannel(host, grpc::InsecureChannelCredentials()));
     }
 
-    if(requestVote(stubs[host].get()))
+    if(requestVote(_stubs[host].get()))
     {
-        votesGained++;
+        _votesGained++;
     }
     // TODO: Request Vote Code here
 }
@@ -219,7 +227,7 @@ void ServerImplementation::invokeRequestVote(string host, atomic<int> *votesGain
 void ServerImplementation::invokeAppendEntries(string node_ip) 
 {
     // context.set_deadline(chrono::system_clock::now() + 
-    //     chrono::milliseconds(heartbeatInterval)); // QUESTION: Do we need this?
+    //     chrono::milliseconds(_heartbeatInterval)); // QUESTION: Do we need this?
     dbgprintf("[DEBUG]: invokeAppendEntries: Entering function\n");
     
     ClientContext context;
@@ -248,17 +256,17 @@ void ServerImplementation::invokeAppendEntries(string node_ip)
         
 bool ServerImplementation::requestVote(Raft::Stub* stub) {
     ReqVoteRequest req;
-    req.set_term(stateHelper.GetCurrentTerm());
-    req.set_candidateid(ip);
-    req.set_lastlogindex(stateHelper.GetLogLength());
-    req.set_lastlogterm(stateHelper.GetTermAtIndex(stateHelper.GetLogLength() - 1));
+    req.set_term(_stateHelper.GetCurrentTerm());
+    req.set_candidateid(_myIp);
+    req.set_lastlogindex(_stateHelper.GetLogLength());
+    req.set_lastlogterm(_stateHelper.GetTermAtIndex(_stateHelper.GetLogLength() - 1));
 
     ReqVoteReply reply;
     ClientContext context;
 
     Status status = stub->ReqVote(&context, req, &reply);
 
-    SetAlarm(electionTimeout);
+    setAlarm(_electionTimeout);
 
     return status.ok()? 1 : 0;
 }
@@ -267,7 +275,7 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
 // Node calls this function after it becomes a leader  
 void ServerImplementation::replicateEntries() 
 {
-    // SetAlarm(ServerImplementation::heartbeatInterval); // QUESTION: Is it needed?
+    // setAlarm(_heartbeatInterval); // QUESTION: Is it needed?
 
     // TODO: Change this later
     vector<string> nodes_list;
@@ -276,8 +284,7 @@ void ServerImplementation::replicateEntries()
 
     for (int i = 0; i < nodes_list.size(); i++) 
     {
-        // TODO: Use get my ip instead of the var ip
-        if (nodes_list[i] != ip) 
+        if (nodes_list[i] != _myIp) 
         {
             thread(&ServerImplementation::invokeAppendEntries, this, nodes_list[i]).detach();
         }
@@ -291,19 +298,19 @@ void ServerImplementation::replicateEntries()
     dbgprintf("[DEBUG]: Got 2 responses\n");
 }
         
-void ServerImplementation::BecomeLeader() {
-    // TODO: Become Leader Code here
-    stateHelper.SetIdentity(ServerIdentity::CANDIDATE); // TODO: Remove later
-    stateHelper.SetIdentity(ServerIdentity::LEADER);
+void ServerImplementation::becomeLeader() {
+    // TODO: become Leader Code here
+    _stateHelper.SetIdentity(ServerIdentity::CANDIDATE); // TODO: Remove later
+    _stateHelper.SetIdentity(ServerIdentity::LEADER);
 
     // TODO: Init next index to leader's last index
 
-    // SetAlarm(heartbeatInterval); // QUESTION: Do we need this?
+    // setAlarm(_heartbeatInterval); // QUESTION: Do we need this?
     replicateEntries();
 }
         
-void ServerImplementation::BecomeFollower() {
-    stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+void ServerImplementation::becomeFollower() {
+    _stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
 }
         
 /* 
@@ -313,25 +320,25 @@ void ServerImplementation::BecomeFollower() {
     TO-DO: Do not invoke if can_vote == false
 */
 
-void ServerImplementation::BecomeCandidate() {
-    stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
-    stateHelper.AddCurrentTerm(stateHelper.GetCurrentTerm() + 1);
+void ServerImplementation::becomeCandidate() {
+    _stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
+    _stateHelper.AddCurrentTerm(_stateHelper.GetCurrentTerm() + 1);
     dbgprintf("INFO] Become Candidate\n");
 
 
     // TODO: Additional things here
-    ResetElectionTimeout();
-    SetAlarm(electionTimeout);
+    resetElectionTimeout();
+    setAlarm(_electionTimeout);
     runForElection();
 }
 
-void ServerImplementation::ResetElectionTimeout() {
-    electionTimeout = minElectionTimeout + (rand() % 
-        (maxElectionTimeout - minElectionTimeout + 1));
+void ServerImplementation::resetElectionTimeout() {
+    _electionTimeout = _minElectionTimeout + (rand() % 
+        (_maxElectionTimeout - _minElectionTimeout + 1));
 }
 
-void ServerImplementation::SetAlarm(int after_ms) {
-    if (stateHelper.GetIdentity() == ServerIdentity::FOLLOWER) {
+void ServerImplementation::setAlarm(int after_ms) {
+    if (_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER) {
         // TODO:
     }
 
@@ -357,7 +364,7 @@ Status ServerImplementation::AppendEntries(ServerContext* context, const AppendE
 
     // TODO: Test Case 1
     // Case 1: leader term < my term
-    my_term = stateHelper.GetCurrentTerm();
+    my_term = _stateHelper.GetCurrentTerm();
     if (request->term() < my_term)
     {
         reply->set_term(my_term);
@@ -379,19 +386,18 @@ Status ServerImplementation::AssertLeadership(ServerContext* context, const Asse
 }
 
 
-void RunServer(string my_ip, const std::vector<string>& hostList) {
-    string server_address(my_ip);
-
+void RunServer(string my_ip, const std::vector<string>& hostList) {    
     /* TO-DO : Initialize GRPC connections to all other servers */
 
     ServerImplementation service;
+    service.SetMyIp(my_ip);
     ServerBuilder builder;
     builder.SetMaxReceiveMessageSize((1.5 * 1024 * 1024 * 1024));
-    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    builder.AddListeningPort(service.GetMyIp(), grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     unique_ptr<Server> server(builder.BuildAndStart());
-	dbgprintf("INFO] Server is live\n");
-    service.serverInit(server_address, hostList);
+	dbgprintf("[INFO] Server is listening on %s\n", service.GetMyIp().c_str());
+    service.ServerInit(hostList);
     server->Wait();
 }
 
