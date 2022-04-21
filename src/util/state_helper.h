@@ -71,6 +71,8 @@ public:
     void Insert(int start_index, vector<Entry> &entries);
     int GetLogLength();
     int GetTermAtIndex(int index);
+    string GetKeyAtIndex(int index);
+    string GetValueAtIndex(int index);
 
     // TODO: Expose GetKeyAtIndex, GetValueAtIndex
 

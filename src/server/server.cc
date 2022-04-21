@@ -375,10 +375,23 @@ void ServerImplementation::SetAlarm(int after_ms) {
 
 Status ServerImplementation::AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply)
 {
-    // TODO: Case 1: leader term < my term
-    dbgprintf("[DEBUG]: Received AppendEntries RPC\n");
+    dbgprintf("[DEBUG]: AppendEntries - Entering RPC\n");
+    int my_term = 0;
+
+    // TODO: Test Case 1
+    // Case 1: leader term < my term
+    my_term = stateHelper.GetCurrentTerm();
+    if (request->term() < my_term)
+    {
+        reply->set_term(my_term);
+        reply->set_success(false);
+        return Status::OK;
+    }
+    
+    dbgprintf("[DEBUG]: AppendEntries - Exiting RPC\n");
     return Status::OK;
 }
+
 Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
 {
     return Status::OK;
