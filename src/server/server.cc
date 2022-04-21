@@ -290,10 +290,6 @@ void ServerImplementation::replicateEntries()
     nodes_list.push_back("0.0.0.0:40000");
     nodes_list.push_back("0.0.0.0:40001");
 
-    // TODO: init stubs properly
-    stubs["0.0.0.0:40000"] = Raft::NewStub(grpc::CreateChannel("0.0.0.0:40000", grpc::InsecureChannelCredentials()));
-    stubs["0.0.0.0:40001"] = Raft::NewStub(grpc::CreateChannel("0.0.0.0:40001", grpc::InsecureChannelCredentials()));
-
     for (int i = 0; i < nodes_list.size(); i++) 
     {
         // TODO: Use get my ip instead of the var ip
