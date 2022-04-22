@@ -43,12 +43,12 @@ using grpc::ServerContext;
 using grpc::ServerWriter;
 using grpc::ServerReader;
 using grpc::Status;
+using grpc::StatusCode;
 using grpc::Service;
 using grpc::ClientContext;
 using grpc::ClientReaderWriter;
 using namespace blockstorage;
 using namespace std;
-using grpc::StatusCode;
 
 /******************************************************************************
  * MACROS

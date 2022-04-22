@@ -87,6 +87,16 @@ class LBNodeCommService final: public LBNodeComm::Service {
             nodes[leaderIP].first = LEADER;
         }
 
+        void addNodeDataToReply(HeartBeatReply* reply) {
+            NodeData* nodeData;
+            for (auto& it: nodes) 
+            {
+                nodeData = reply->add_node_data();
+                nodeData->set_ip(it.first);
+                nodeData->set_identity(it.second.first);
+            }
+        }
+
     public:
         LBNodeCommService() {}
 
@@ -96,7 +106,7 @@ class LBNodeCommService final: public LBNodeComm::Service {
 
             int identity;
             string ip;
-            bool first_time = true;
+            bool registerFirstTime = true;
             // TODO: create client on the fly
 
             while(1) {
@@ -107,11 +117,18 @@ class LBNodeCommService final: public LBNodeComm::Service {
 
                 identity = request.identity();
                 ip = request.ip();
-                registerNode(identity, ip);
+
+                if(registerFirstTime) {
+                    registerNode(identity, ip);
+                }
+                registerFirstTime = false;
                 
                 if(identity == LEADER){
                     updateLeader(ip);
                 }
+
+                addNodeDataToReply(&reply);
+                
                 if(!stream->Write(reply)) {
                     break;
                 }
