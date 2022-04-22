@@ -208,6 +208,11 @@ void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply) {
                                             Raft::NewStub(grpc::CreateChannel(nodeData.ip(), grpc::InsecureChannelCredentials())));
         dbgprintf("%s : %d \n", nodeData.ip().c_str(), nodeData.identity());
     }
+
+// TODO: Use nodes data structure
+int ServerImplementation::GetMajorityCount()
+{
+     return ((_hostList.size()/2) + 1);
 }
 
 bool ServerImplementation::ReceivedMajority() {
@@ -217,7 +222,7 @@ bool ServerImplementation::ReceivedMajority() {
         if(replyReceived.success()) 
         {
             countSuccess++;
-            if(2 * countSuccess == _hostList.size())
+            if(countSuccess >= GetMajorityCount())
             {
                 return true; // break on receiving majority
             }

@@ -75,6 +75,8 @@ private:
 
   AppendEntriesRequest prepareRequestForAppendEntries(int nextIndex);
 
+  int GetMajorityCount();
+
 
 public:
   void SetMyIp(string ip);
