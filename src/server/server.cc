@@ -83,7 +83,7 @@ class KeyValueOpsServiceImpl final : public KeyValueOps::Service
         Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override 
         {
             dbgprintf("[DEBUG] %s: Entering function\n", __func__);            
-            serverImpl.ClearAppendEntriesMap(); // TODO: Use instance of serverImpl ???
+            serverImpl.ClearAppendEntriesMap();
             
             g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value());
             
@@ -94,7 +94,7 @@ class KeyValueOpsServiceImpl final : public KeyValueOps::Service
                 dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
             } while(!serverImpl.ReceivedMajority());
             
-            g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1); // TODO: -1? @Benita
+            g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1);
             serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
             
             dbgprintf("[DEBUG] %s: Exiting function\n", __func__);

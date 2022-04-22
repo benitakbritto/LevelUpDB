@@ -73,10 +73,12 @@ class LBNodeCommService final: public LBNodeComm::Service {
         void registerNode(int identity, string ip) {
             nodes[ip] = make_pair(identity,
                             new KeyValueClient (grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
+            dbgprintf("[DEBUG]: Length of nodes at LB: %ld", nodes.size());
         }
 
         void eraseNode(string ip) {
             nodes.erase(ip);
+            dbgprintf("[DEBUG]: Removed ip %s, Length of nodes at LB: %ld\n", ip.c_str(), nodes.size());
         }
 
         void updateLeader(string ip) {
@@ -118,6 +120,7 @@ class LBNodeCommService final: public LBNodeComm::Service {
                 ip = request.ip();
 
                 if(registerFirstTime) {
+                    dbgprintf("[DEBUG]: Registering node %s for the 1st time\n", ip.c_str());
                     registerNode(identity, ip);
                 }
                 registerFirstTime = false;
@@ -125,7 +128,7 @@ class LBNodeCommService final: public LBNodeComm::Service {
                 if(identity == LEADER){
                     updateLeader(ip);
                 }
-
+                reply.Clear();
                 addNodeDataToReply(&reply);
                 
                 if(!stream->Write(reply)) {
