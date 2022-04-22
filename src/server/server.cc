@@ -198,6 +198,13 @@ void ServerImplementation::ServerInit(const std::vector<string>& o_hostList) {
     if (_myIp == "0.0.0.0:50000") becomeLeader();
 }
 
+
+// TODO: Use nodes data structure
+int ServerImplementation::GetMajorityCount()
+{
+     return ((_hostList.size()/2) + 1);
+}
+
 bool ServerImplementation::ReceivedMajority() {
     int countSuccess = 0;
     for (auto& it: _appendEntriesResponseMap) {
@@ -205,7 +212,7 @@ bool ServerImplementation::ReceivedMajority() {
         if(replyReceived.success()) 
         {
             countSuccess++;
-            if(2 * countSuccess == _hostList.size())
+            if(countSuccess >= GetMajorityCount())
             {
                 return true; // break on receiving majority
             }
