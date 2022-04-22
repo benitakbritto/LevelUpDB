@@ -66,39 +66,44 @@ string lb_addr = "0.0.0.0:50052";
  * DECLARATION
  *****************************************************************************/
 
-class KeyValueOpsServiceImpl final : public KeyValueOps::Service {
+class KeyValueOpsServiceImpl final : public KeyValueOps::Service 
+{
 
     private:
         ServerImplementation serverImpl;
 
     public:
         Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override {
-            dbgprintf("reached server\n");
+            dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+            dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
             return Status::OK;
         }
 
-        Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override {
-            dbgprintf("reached server\n");
-            
+        Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override 
+        {
+            dbgprintf("[DEBUG] %s: Entering function\n", __func__);            
             serverImpl.ClearAppendEntriesMap(); // TODO: Use instance of serverImpl ???
             
             g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value());
             
             serverImpl.BroadcastAppendEntries();
             
+            // wait for majority
             do {
-                // wait for majority
+                dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
             } while(!serverImpl.ReceivedMajority());
             
             g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1); // TODO: -1? @Benita
             serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
             
+            dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
             return Status::OK;
         }
 
 };
 
-void *RunKeyValueServer(void* args) {
+void *RunKeyValueServer(void* args) 
+{
     KeyValueOpsServiceImpl service;
     // string server_address(self_addr_lb);
     grpc::EnableDefaultHealthCheckService(true);
@@ -114,7 +119,8 @@ void *RunKeyValueServer(void* args) {
     return NULL;
 }
 
-class LBNodeCommClient {
+class LBNodeCommClient 
+{
     private:
         unique_ptr<LBNodeComm::Stub> stub_;
         int identity;
@@ -155,7 +161,8 @@ class LBNodeCommClient {
         }
 };
 
-void *StartHB(void* args) {
+void *StartHB(void* args) 
+{
     int identity_enum = LEADER;
 
     LBNodeCommClient lBNodeCommClient(lb_addr, identity_enum, self_addr_lb);
@@ -164,7 +171,8 @@ void *StartHB(void* args) {
     return NULL;
 }
 
-void signalHandler(int signum) {
+void signalHandler(int signum) 
+{
 	return;
 }
 
@@ -178,7 +186,9 @@ string ServerImplementation::GetMyIp()
     return _myIp;
 }
 
-void ServerImplementation::ServerInit(const vector<string>& o_hostList) {    
+void ServerImplementation::ServerInit(const vector<string>& o_hostList) 
+{    
+    dbgprintf("[DEBUG]: %s: Inside function\n", __func__);
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
     g_stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
     
@@ -186,7 +196,8 @@ void ServerImplementation::ServerInit(const vector<string>& o_hostList) {
     errno = 0;
     signal(SIGALRM, &signalHandler);
     
-    if (errno) {
+    if (errno) 
+    {
         dbgprintf("ERROR] Signal could not be set\n");
         errno = old_errno;
         return;
@@ -198,9 +209,11 @@ void ServerImplementation::ServerInit(const vector<string>& o_hostList) {
 
     // TODO: Remove later
     if (_myIp == "0.0.0.0:50000") becomeLeader();
+    dbgprintf("[DEBUG]: %s: Exiting function\n", __func__);
 }
 
-void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply) {
+void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply) 
+{
     for (int i = 0; i < reply.node_data_size(); i++)
     {
         auto nodeData = reply.node_data(i);
@@ -208,6 +221,7 @@ void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply) {
                                             Raft::NewStub(grpc::CreateChannel(nodeData.ip(), grpc::InsecureChannelCredentials())));
         dbgprintf("%s : %d \n", nodeData.ip().c_str(), nodeData.identity());
     }
+}
 
 // TODO: Use nodes data structure
 int ServerImplementation::GetMajorityCount()
@@ -370,6 +384,8 @@ AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (int n
         
 void ServerImplementation::invokeAppendEntries(string followerIp) 
 {
+    dbgprintf("[DEBUG] %s: Entering function with followerIp = %s\n", __func__, followerIp.c_str());
+    
     // Init params to invoke the RPC
     AppendEntriesRequest request;
     AppendEntriesReply reply;
@@ -379,8 +395,8 @@ void ServerImplementation::invokeAppendEntries(string followerIp)
     int retryCount = 0;
     bool shouldRetry = false;
 
-    nextIndex = g_stateHelper.GetNextIndex(_myIp);
-    matchIndex = g_stateHelper.GetMatchIndex(_myIp);
+    nextIndex = g_stateHelper.GetNextIndex(followerIp);
+    matchIndex = g_stateHelper.GetMatchIndex(followerIp);
 
     // Retry the RPC until log is consistent
     do 
@@ -405,7 +421,7 @@ void ServerImplementation::invokeAppendEntries(string followerIp)
       
         // Check if RPC should be retried because of log inconsistencies
         shouldRetry = (request.term() >= reply.term() && !reply.success());
-        
+        dbgprintf("[DEBUG] %s: shouldRetry = %d\n", __func__, shouldRetry);
         // AppendEntries failed because of log inconsistencies
         if (shouldRetry) 
         {
@@ -423,8 +439,11 @@ void ServerImplementation::invokeAppendEntries(string followerIp)
     // RPC succeeded on the follower - Update match index
     else if(reply.success())
     {
+        dbgprintf("[DEBUG] %s: RPC sucess\n", __func__);
         g_stateHelper.SetMatchIndex(followerIp, g_stateHelper.GetLogLength()-1);
     }
+
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
 bool ServerImplementation::requestVote(Raft::Stub* stub) {
@@ -447,7 +466,7 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
 // Node calls this function after it becomes a leader  
 void ServerImplementation::BroadcastAppendEntries() 
 {
-    dbgprintf("[DEBUG] BroadcastAppendEntries: Entering function\n");
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);
 
     // TODO: Replace
     vector<string> nodes_list = dummyGetHostList();
@@ -463,13 +482,15 @@ void ServerImplementation::BroadcastAppendEntries()
     // Stop this function if leader learns that it no longer is the leader
     if (g_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER)
     {
+        dbgprintf("[DEBUG] %s: Leader becomes follower\n", __func__);
         return;
     }
-    dbgprintf("[DEBUG] broadcastAppendEntries: Exiting function\n");
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
         
-void ServerImplementation::becomeLeader() {
-    dbgprintf("[DEBUG] becomeLeader: Entering function\n");
+void ServerImplementation::becomeLeader() 
+{
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);
 
     g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE); // TODO: Remove later
     g_stateHelper.SetIdentity(ServerIdentity::LEADER);
@@ -481,12 +502,14 @@ void ServerImplementation::becomeLeader() {
 
     thread(&ServerImplementation::invokePeriodicAppendEntries, this).detach();
 
-    dbgprintf("[DEBUG] becomeLeader: Exiting function\n");
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
-void ServerImplementation::invokePeriodicAppendEntries(){
+void ServerImplementation::invokePeriodicAppendEntries()
+{
     while (1)
     {
+        dbgprintf("[INFO] %s: Raising periodic Append Entries\n", __func__);
         BroadcastAppendEntries();
         sleep(HB_SLEEP_IN_SEC);
     }
@@ -654,12 +677,14 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
 
 void ServerImplementation::ExecuteCommands(int start, int end) 
 {
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for(int i = start; i <= end; i++)
     {   // TODO: Uncomment after pulling cmake changes for leveldb from main 
         // levelDBWrapper.Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
         // TODO: check failure
         g_stateHelper.SetLastAppliedIndex(i); 
     }
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
 Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
