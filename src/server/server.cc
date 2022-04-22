@@ -27,12 +27,12 @@
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
 #include "keyvalueops.grpc.pb.h"
+#include "lb.grpc.pb.h"
 #include "raft.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 
 #include "server.h"
-#include "lb.grpc.pb.h"
 
 /******************************************************************************
  * NAMESPACES
@@ -60,7 +60,7 @@ using namespace std;
 StateHelper g_stateHelper;
 
 string self_addr_lb = "0.0.0.0:50051";
-string lb_addr = "0.0.0.0:50056";
+string lb_addr = "0.0.0.0:50052";
 
 /******************************************************************************
  * DECLARATION
@@ -106,9 +106,9 @@ void *RunKeyValueServer(void* args) {
     ServerBuilder builder;
     builder.AddListeningPort(self_addr_lb, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
-    std::unique_ptr<Server> server(builder.BuildAndStart());
+    unique_ptr<Server> server(builder.BuildAndStart());
     
-    cout << "[INFO] KeyValue Server listening on "<< self_addr_lb << std::endl;
+    cout << "[INFO] KeyValue Server listening on "<< self_addr_lb << endl;
     
     server->Wait();
     return NULL;
@@ -119,6 +119,7 @@ class LBNodeCommClient {
         unique_ptr<LBNodeComm::Stub> stub_;
         int identity;
         string ip;
+        ServerImplementation serverImpl;
   
     public:
         LBNodeCommClient(string target_str, int _identity, string _ip) {
@@ -130,7 +131,7 @@ class LBNodeCommClient {
         void SendHeartBeat() {
             ClientContext context;
             
-            std::shared_ptr<ClientReaderWriter<HeartBeatRequest, HeartBeatReply> > stream(
+            shared_ptr<ClientReaderWriter<HeartBeatRequest, HeartBeatReply> > stream(
                 stub_->SendHeartBeat(&context));
 
             HeartBeatReply reply;
@@ -146,6 +147,7 @@ class LBNodeCommClient {
                 dbgprintf("[INFO] SendHeartBeat: recv heartbeat response\n");
                 
                 // TODO : Parse reply to get sys state
+                serverImpl.BuildSystemStateFromHBReply(reply);
 
                 dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
                 sleep(HB_SLEEP_IN_SEC);
@@ -176,7 +178,7 @@ string ServerImplementation::GetMyIp()
     return _myIp;
 }
 
-void ServerImplementation::ServerInit(const std::vector<string>& o_hostList) {    
+void ServerImplementation::ServerInit(const vector<string>& o_hostList) {    
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
     g_stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
     
@@ -196,6 +198,16 @@ void ServerImplementation::ServerInit(const std::vector<string>& o_hostList) {
 
     // TODO: Remove later
     if (_myIp == "0.0.0.0:50000") becomeLeader();
+}
+
+void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply) {
+    for (int i = 0; i < reply.node_data_size(); i++)
+    {
+        auto nodeData = reply.node_data(i);
+        _nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
+                                            Raft::NewStub(grpc::CreateChannel(nodeData.ip(), grpc::InsecureChannelCredentials())));
+        dbgprintf("%s : %d \n", nodeData.ip().c_str(), nodeData.identity());
+    }
 }
 
 bool ServerImplementation::ReceivedMajority() {
@@ -224,10 +236,10 @@ void ServerImplementation::runForElection() {
     int initialTerm = g_stateHelper.GetCurrentTerm();
 
     /* Vote for self - hence 1*/
-    std::atomic<int> _votesGained(1);
+    atomic<int> _votesGained(1);
     for (int i = 0; i < _hostList.size(); i++) {
         if (_hostList[i] != _myIp) {
-        std::thread(&ServerImplementation::invokeRequestVote, this, _hostList[i], &_votesGained).detach();
+        thread(&ServerImplementation::invokeRequestVote, this, _hostList[i], &_votesGained).detach();
         }
     }
     /* OPTIONAL - Can add sleep(_electionTimeout */
@@ -628,12 +640,14 @@ Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteReques
     return Status::OK;
 }
 
+// TODO: Why do we need this here? Should only be on the LB @Shreyansh @Benita
+
 Status ServerImplementation::AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply)
 {
     return Status::OK;
 }
 
-void RunServer(string my_ip, const std::vector<string>& hostList) {    
+void RunServer(string my_ip, const vector<string>& hostList) {    
     /* TO-DO : Initialize GRPC connections to all other servers */
 
     ServerImplementation service;
@@ -651,12 +665,12 @@ void RunServer(string my_ip, const std::vector<string>& hostList) {
 int main(int argc, char **argv) {
     // TODO: Uncomment later
     // pthread_t kv_server_t;
-    // pthread_t hb_t;
+    pthread_t hb_t;
     
     // pthread_create(&kv_server_t, NULL, RunKeyValueServer, NULL);
-    // pthread_create(&hb_t, NULL, StartHB, NULL);
+    pthread_create(&hb_t, NULL, StartHB, NULL);
 
-    // pthread_join(hb_t, NULL);
+    pthread_join(hb_t, NULL);
     // pthread_join(kv_server_t, NULL);
     
     vector<string> hostList;
