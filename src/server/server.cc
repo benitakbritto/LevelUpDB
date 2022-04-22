@@ -57,6 +57,7 @@ using grpc::StatusCode;
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
+StateHelper g_stateHelper;
 
 string self_addr_lb = "0.0.0.0:50051";
 string lb_addr = "0.0.0.0:50056";
@@ -68,8 +69,8 @@ string lb_addr = "0.0.0.0:50056";
 class KeyValueOpsServiceImpl final : public KeyValueOps::Service {
 
     private:
-        StateHelper _stateHelper; // TODO: Make GLOBAL???
         ServerImplementation serverImpl;
+
     public:
         Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override {
             dbgprintf("reached server\n");
@@ -81,7 +82,7 @@ class KeyValueOpsServiceImpl final : public KeyValueOps::Service {
             
             serverImpl.ClearAppendEntriesMap(); // TODO: Use instance of serverImpl ???
             
-            _stateHelper.Append(_stateHelper.GetCurrentTerm(), request->key(), request->value());
+            g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value());
             
             serverImpl.BroadcastAppendEntries();
             
@@ -89,8 +90,8 @@ class KeyValueOpsServiceImpl final : public KeyValueOps::Service {
                 // wait for majority
             } while(!serverImpl.ReceivedMajority());
             
-            _stateHelper.SetCommitIndex(_stateHelper.GetLogLength()-1); // TODO: -1? @Benita
-            serverImpl.ExecuteCommands(_stateHelper.GetLastAppliedIndex() + 1, _stateHelper.GetCommitIndex());
+            g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1); // TODO: -1? @Benita
+            serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
             
             return Status::OK;
         }
@@ -176,8 +177,8 @@ string ServerImplementation::GetMyIp()
 }
 
 void ServerImplementation::ServerInit(const std::vector<string>& o_hostList) {    
-    _stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
-    _stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
+    g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    g_stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
     
     int old_errno = errno;
     errno = 0;
@@ -220,7 +221,7 @@ void ServerImplementation::ClearAppendEntriesMap() {
 /* Candidate starts a new election */
 void ServerImplementation::runForElection() {
 
-    int initialTerm = _stateHelper.GetCurrentTerm();
+    int initialTerm = g_stateHelper.GetCurrentTerm();
 
     /* Vote for self - hence 1*/
     std::atomic<int> _votesGained(1);
@@ -235,7 +236,7 @@ void ServerImplementation::runForElection() {
     //         currentTerm == initialTerm) {
     // }
 
-    if (_votesGained > _hostCount/2 && _stateHelper.GetCurrentTerm() == ServerIdentity::CANDIDATE) {
+    if (_votesGained > _hostCount/2 && g_stateHelper.GetCurrentTerm() == ServerIdentity::CANDIDATE) {
         becomeLeader();
     }
 }
@@ -264,21 +265,21 @@ AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (int n
     Status status;
 
     int retryCount = 0;
-    int logLength = _stateHelper.GetLogLength();
-    int prevLogIndex = _stateHelper.GetMatchIndex(_myIp);
-    int prevLogTerm = _stateHelper.GetTermAtIndex(prevLogIndex);
+    int logLength = g_stateHelper.GetLogLength();
+    int prevLogIndex = g_stateHelper.GetMatchIndex(_myIp);
+    int prevLogTerm = g_stateHelper.GetTermAtIndex(prevLogIndex);
 
-    request.set_term(_stateHelper.GetCurrentTerm()); 
+    request.set_term(g_stateHelper.GetCurrentTerm()); 
     request.set_leader_id(_myIp); 
     request.set_prev_log_index(prevLogIndex); 
     request.set_prev_log_term(prevLogTerm);
-    request.set_leader_commit_index(_stateHelper.GetCommitIndex());
+    request.set_leader_commit_index(g_stateHelper.GetCommitIndex());
 
     // TODO: Improve efficiency
     for(int i = nextIndex; i < logLength; i++) 
     {
-        string key = _stateHelper.GetKeyAtIndex(i);
-        string value = _stateHelper.GetValueAtIndex(i);
+        string key = g_stateHelper.GetKeyAtIndex(i);
+        string value = g_stateHelper.GetValueAtIndex(i);
 
         auto data = request.add_log_entry();
 
@@ -302,10 +303,10 @@ AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (int n
 //     Status status;
 //     int retryCount = 0;
 
-//     int logLength = _stateHelper.GetLogLength();
+//     int logLength = g_stateHelper.GetLogLength();
 //     int prevLogIndex = logLength-1; // TODO: Change on retry
-//     int prevLogTerm = _stateHelper.GetTermAtIndex(prevLogIndex);
-//     int nextIndex = _stateHelper.GetNextIndex();
+//     int prevLogTerm = g_stateHelper.GetTermAtIndex(prevLogIndex);
+//     int nextIndex = g_stateHelper.GetNextIndex();
 
 //     // TODO: Get stub from a global data structure
 //     auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
@@ -340,7 +341,7 @@ AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (int n
 //     // AppendEntries was successful for node
 //     else if (reply.success() == true)
 //     {
-//         _stateHelper.SetMatchIndex(followerIp, logLength - 1);
+//         g_stateHelper.SetMatchIndex(followerIp, logLength - 1);
 //     }
 
 
@@ -357,8 +358,8 @@ void ServerImplementation::invokeAppendEntries(string followerIp) {
     int retryCount = 0;
     bool shouldRetry = false;
     
-    nextIndex = _stateHelper.GetNextIndex(_myIp);
-    matchIndex = _stateHelper.GetMatchIndex(_myIp);
+    nextIndex = g_stateHelper.GetNextIndex(_myIp);
+    matchIndex = g_stateHelper.GetMatchIndex(_myIp);
 
     do 
     {
@@ -383,8 +384,8 @@ void ServerImplementation::invokeAppendEntries(string followerIp) {
         shouldRetry = (request.term() >= reply.term() || !reply.success());
         
         if (shouldRetry) {
-            _stateHelper.SetNextIndex(followerIp, nextIndex-1);
-            _stateHelper.SetNextIndex(followerIp, matchIndex-1);
+            g_stateHelper.SetNextIndex(followerIp, nextIndex-1);
+            g_stateHelper.SetNextIndex(followerIp, matchIndex-1);
         }
 
     } while (shouldRetry);
@@ -396,16 +397,16 @@ void ServerImplementation::invokeAppendEntries(string followerIp) {
     }
     else if(reply.success())
     {
-        _stateHelper.SetMatchIndex(followerIp, _stateHelper.GetLogLength()-1);
+        g_stateHelper.SetMatchIndex(followerIp, g_stateHelper.GetLogLength()-1);
     }
 }
 
 bool ServerImplementation::requestVote(Raft::Stub* stub) {
     ReqVoteRequest req;
-    req.set_term(_stateHelper.GetCurrentTerm());
+    req.set_term(g_stateHelper.GetCurrentTerm());
     req.set_candidateid(_myIp);
-    req.set_lastlogindex(_stateHelper.GetLogLength());
-    req.set_lastlogterm(_stateHelper.GetTermAtIndex(_stateHelper.GetLogLength() - 1));
+    req.set_lastlogindex(g_stateHelper.GetLogLength());
+    req.set_lastlogterm(g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength() - 1));
 
     ReqVoteReply reply;
     ClientContext context;
@@ -436,7 +437,7 @@ void ServerImplementation::BroadcastAppendEntries()
     }
     
     // Stop this function if leader learns that it no longer is the leader
-    if (_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER)
+    if (g_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER)
     {
         return;
     }
@@ -446,8 +447,8 @@ void ServerImplementation::BroadcastAppendEntries()
 void ServerImplementation::becomeLeader() {
     dbgprintf("[DEBUG] becomeLeader: Entering function\n");
 
-    _stateHelper.SetIdentity(ServerIdentity::CANDIDATE); // TODO: Remove later
-    _stateHelper.SetIdentity(ServerIdentity::LEADER);
+    g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE); // TODO: Remove later
+    g_stateHelper.SetIdentity(ServerIdentity::LEADER);
 
     setNextIndexToLeaderLastIndex();
     setMatchIndexToLeaderLastIndex();
@@ -468,22 +469,22 @@ void ServerImplementation::invokePeriodicAppendEntries(){
 }
 
 void ServerImplementation::setNextIndexToLeaderLastIndex() {
-    int leaderLastIndex = _stateHelper.GetNextIndex(_myIp);
+    int leaderLastIndex = g_stateHelper.GetNextIndex(_myIp);
     vector<string> nodes_list = dummyGetHostList();
 
     for(string nodeIp: nodes_list) 
     {
-        _stateHelper.SetNextIndex(nodeIp, leaderLastIndex);
+        g_stateHelper.SetNextIndex(nodeIp, leaderLastIndex);
     }
 }
 
 void ServerImplementation::setMatchIndexToLeaderLastIndex() {
-    int leaderLastIndex = _stateHelper.GetNextIndex(_myIp);
+    int leaderLastIndex = g_stateHelper.GetNextIndex(_myIp);
     vector<string> nodes_list = dummyGetHostList();
 
     for(string nodeIp: nodes_list) 
     {
-        _stateHelper.SetMatchIndex(nodeIp, leaderLastIndex);
+        g_stateHelper.SetMatchIndex(nodeIp, leaderLastIndex);
     }
 }
 
@@ -500,7 +501,7 @@ vector<string> ServerImplementation::dummyGetHostList() {
 }
 
 void ServerImplementation::becomeFollower() {
-    _stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
 }
         
 /* 
@@ -511,8 +512,8 @@ void ServerImplementation::becomeFollower() {
 */
 
 void ServerImplementation::becomeCandidate() {
-    _stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
-    _stateHelper.AddCurrentTerm(_stateHelper.GetCurrentTerm() + 1);
+    g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
+    g_stateHelper.AddCurrentTerm(g_stateHelper.GetCurrentTerm() + 1);
     dbgprintf("INFO] Become Candidate\n");
 
 
@@ -528,7 +529,7 @@ void ServerImplementation::resetElectionTimeout() {
 }
 
 void ServerImplementation::setAlarm(int after_ms) {
-    if (_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER) {
+    if (g_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER) {
         // TODO:
     }
 
@@ -555,7 +556,7 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
     int my_term = 0;
 
     // Case 1: leader term < my term
-    my_term = _stateHelper.GetCurrentTerm();
+    my_term = g_stateHelper.GetCurrentTerm();
     if (request->term() < my_term)
     {
         dbgprintf("[DEBUG]: AppendEntries RPC - Recever's term > request term\n");
@@ -574,7 +575,7 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
         }
 
         // Check if term at log index matches
-        if (_stateHelper.GetTermAtIndex(request->prev_log_index()) != request->prev_log_term())
+        if (g_stateHelper.GetTermAtIndex(request->prev_log_index()) != request->prev_log_term())
         {
             dbgprintf("[DEBUG]: AppendEntries RPC - term mismatch at log index\n");
             reply->set_term(my_term);
@@ -587,19 +588,19 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
             for (int i = 0; i < request->log_entry_size(); i++) {
                 SingleLogEntry logEntryAtIndex = request->log_entry(i);
 
-                Entry entry(_stateHelper.GetTermAtIndex(logEntryAtIndex.log_index()),
+                Entry entry(g_stateHelper.GetTermAtIndex(logEntryAtIndex.log_index()),
                                 logEntryAtIndex.key(),
                                 logEntryAtIndex.value());
 
                 entries.push_back(entry);
             }
-            _stateHelper.Insert(request->prev_log_index()+1, entries);
+            g_stateHelper.Insert(request->prev_log_index()+1, entries);
 
-            if(request->leader_commit_index() > _stateHelper.GetCommitIndex())
+            if(request->leader_commit_index() > g_stateHelper.GetCommitIndex())
             {
-                _stateHelper.SetCommitIndex(request->leader_commit_index());
+                g_stateHelper.SetCommitIndex(request->leader_commit_index());
 
-                ExecuteCommands(_stateHelper.GetLastAppliedIndex(), request->leader_commit_index());
+                ExecuteCommands(g_stateHelper.GetLastAppliedIndex(), request->leader_commit_index());
                 
                 reply->set_term(my_term);
                 reply->set_success(true);
@@ -616,9 +617,9 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
 void ServerImplementation::ExecuteCommands(int start, int end) {
     for(int i = start; i <= end; i++)
     {   // TODO: Uncomment after pulling cmake changes for leveldb from main 
-        // levelDBWrapper.Put(_stateHelper.GetKeyAtIndex(i), _stateHelper.GetValueAtIndex(i));
+        // levelDBWrapper.Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
         // TODO: check failure
-        _stateHelper.SetLastAppliedIndex(i); 
+        g_stateHelper.SetLastAppliedIndex(i); 
     }
 }
 

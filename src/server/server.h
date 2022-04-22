@@ -39,7 +39,7 @@ private:
   unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
   MutexMap _lockHelper;
   string _myIp;
-  StateHelper _stateHelper;
+  // StateHelper _stateHelper;
   std::map<string,std::unique_ptr<Raft::Stub>> _stubs;
   const std::vector<std::string> _hostList;
   // LevelDBWrapper _levelDBWrapper;
