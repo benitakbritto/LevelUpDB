@@ -50,8 +50,6 @@ using namespace blockstorage;
 using namespace std;
 using grpc::StatusCode;
 
-
-
 /******************************************************************************
  * MACROS
  *****************************************************************************/
@@ -77,6 +75,18 @@ class KeyValueOpsServiceImpl final : public KeyValueOps::Service {
 
         Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override {
             dbgprintf("reached server\n");
+            // cleanup apppendEntriesReply map
+            // append() to log
+            // broadcast AE 
+            do {
+
+            } while(!majority);
+            
+            // setCommitIdx(lastLogIdx)
+            // for i in[lastApplied+1, commitIdx]
+                // exec cmd at i
+                // lastApplied ++
+
             return Status::OK;
         }
 
@@ -160,7 +170,6 @@ string ServerImplementation::GetMyIp()
     return _myIp;
 }
 
-
 void ServerImplementation::ServerInit(const std::vector<string>& o_hostList) {    
     _stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
     _stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
@@ -239,75 +248,126 @@ void ServerImplementation::invokeRequestVote(string host, atomic<int> *_votesGai
     // TODO: Request Vote Code here
 }
 
-// TODO: Test 
-// Leader makes this call to other nodes  
-void ServerImplementation::invokeAppendEntries(string followerIp) 
-{
-    dbgprintf("[DEBUG] invokeAppendEntries: Entering function\n");
-    // context.set_deadline(chrono::system_clock::now() + 
-    //     chrono::milliseconds(_heartbeatInterval)); // QUESTION: Do we need this?
-    
+AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (int nextIndex) {
+
     AppendEntriesRequest request;
     AppendEntriesReply reply;
     Status status;
+
     int retryCount = 0;
-    int prevLogIndex;
-    int prevLogTerm;
+    int logLength = _stateHelper.GetLogLength();
+    int prevLogIndex = _stateHelper.GetMatchIndex();
+    int prevLogTerm = _stateHelper.GetTermAtIndex(prevLogIndex);
 
     request.set_term(_stateHelper.GetCurrentTerm()); 
     request.set_leader_id(_myIp); 
-    
-    prevLogIndex = _stateHelper.GetLogLength()-1;
     request.set_prev_log_index(prevLogIndex); 
-    
-    prevLogTerm = _stateHelper.GetTermAtIndex(prevLogIndex);
     request.set_prev_log_term(prevLogTerm);
+    request.set_leader_commit_index(_stateHelper.GetCommitIndex());
 
-    auto data = request.add_log_entry(); // TODO: Set appropriately
-    // data->set_log_index(1); // TODO: Set appropriately
-    // data->set_key(1); // TODO: Set appropriately
-    // data->set_value("1"); // TODO: Set appropriately
-
-    // TODO: Get stub from a global data structure
-    auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
-
-    // Retry w backoff
-    do
+    // TODO: Improve efficiency
+    for(int i = nextIndex; i < logLength; i++) 
     {
-        ClientContext context;
-        reply.Clear();
-        sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
-        
-        status = stub->AppendEntries(&context, request, &reply);
-        
-        retryCount++;
-    } while (status.error_code() == StatusCode::UNAVAILABLE);
+        string key = _stateHelper.GetKeyAtIndex(i);
+        string value = _stateHelper.GetValueAtIndex(i);
 
-    dbgprintf("Status ok = %d\n", status.ok());
-    _appendEntriesResponseMap[followerIp] = reply;
+        auto data = request.add_log_entry();
 
-    // Check the reply of the RPC
+        data->set_log_index(i); 
+        data->set_key(key); 
+        data->set_value(value);
+    }
+
+    return request;
+}
+// TODO: Test 
+// Leader makes this call to other nodes  
+// void ServerImplementation::invokeAppendEntries(string followerIp) 
+// {
+//     dbgprintf("[DEBUG] invokeAppendEntries: Entering function\n");
+//     // context.set_deadline(chrono::system_clock::now() + 
+//     //     chrono::milliseconds(_heartbeatInterval)); // QUESTION: Do we need this?
+    
+//     AppendEntriesRequest request;
+//     AppendEntriesReply reply;
+//     Status status;
+//     int retryCount = 0;
+
+//     int logLength = _stateHelper.GetLogLength();
+//     int prevLogIndex = logLength-1; // TODO: Change on retry
+//     int prevLogTerm = _stateHelper.GetTermAtIndex(prevLogIndex);
+//     int nextIndex = _stateHelper.GetNextIndex();
+
+//     // TODO: Get stub from a global data structure
+//     auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
+
+//     // Retry w backoff
+//     do
+//     {
+//         ClientContext context;
+//         reply.Clear();
+//         sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
+        
+//         status = stub->AppendEntries(&context, request, &reply);
+        
+//         retryCount++;
+//     } while (status.error_code() == StatusCode::UNAVAILABLE);
+
+//     dbgprintf("Status ok = %d\n", status.ok());
+//     _appendEntriesResponseMap[followerIp] = reply;
+
+//     // Check the reply of the RPC
+//     if (request.term() < reply.term())
+//     {
+//         // Leader becomes follower
+//         becomeFollower();
+//         return;
+//     }
+//     // TODO: Retry RPC with different next index
+//     else if (reply.success() == false)
+//     {
+ 
+//     }
+//     // AppendEntries was successful for node
+//     else if (reply.success() == true)
+//     {
+//         _stateHelper.SetMatchIndex(followerIp, logLength - 1);
+//     }
+
+
+//     dbgprintf("[DEBUG]: invokeAppendEntries: Exiting function\n");
+// }
+        
+void ServerImplementation::invokeAppendEntries(string followerIp) {
+
+    int nextIndex = _stateHelper.GetNextIndex();
+
+    do 
+    {
+        AppendEntriesRequest request = prepareRequestForAppendEntries();
+        auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
+        // call RPC with retry with backoff
+      
+        bool shouldRetry = (request.term() >= reply.term() || !reply.success())
+        
+        if (shouldRetry) {
+            _stateHelper.SetNextIndex(nextIndex-1);
+            _stateHelper.SetNextIndex(matchIndex-1);
+        }
+
+    } while (shouldRetry);
+
     if (request.term() < reply.term())
     {
         // Leader becomes follower
         becomeFollower();
-        // TODO: Stop this function
     }
-    // TODO: Retry RPC with different next index
-    else if (reply.success() == false)
+    else if(reply.success())
     {
-       
+        // setMatchIdx =  end of log
     }
-    // AppendEntries was successful for node
-    else if (reply.success() == true)
-    {
-        _stateHelper.SetMatchIndex(followerIp, _stateHelper.GetLogLength() - 1);
-    }
-
-
-    dbgprintf("[DEBUG]: invokeAppendEntries: Exiting function\n");
 }
-        
+
 bool ServerImplementation::requestVote(Raft::Stub* stub) {
     ReqVoteRequest req;
     req.set_term(_stateHelper.GetCurrentTerm());
@@ -327,12 +387,12 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
 
 // TODO: Add params?
 // Node calls this function after it becomes a leader  
-void ServerImplementation::replicateEntries() 
+void ServerImplementation::broadcastAppendEntries() 
 {
-    dbgprintf("[DEBUG] replicateEntries: Entering function\n");
+    dbgprintf("[DEBUG] broadcastAppendEntries: Entering function\n");
     // setAlarm(_heartbeatInterval); // QUESTION: Is it needed?
 
-    // TODO: Change this later
+    // TODO: Call dummyGetHostsList()
     vector<string> nodes_list;
     nodes_list.push_back("0.0.0.0:40000");
     nodes_list.push_back("0.0.0.0:40001");
@@ -350,12 +410,7 @@ void ServerImplementation::replicateEntries()
     {
         return;
     }
-
-    // QUESTION: Is there a case where the leader fails to reach majority???
-    while(!checkMajority()){
-        // keep waiting
-    }
-    dbgprintf("[DEBUG] replicateEntries: Exiting function\n");
+    dbgprintf("[DEBUG] broadcastAppendEntries: Exiting function\n");
 }
         
 void ServerImplementation::becomeLeader() {
@@ -365,17 +420,43 @@ void ServerImplementation::becomeLeader() {
     _stateHelper.SetIdentity(ServerIdentity::LEADER);
 
     setNextIndexToLeaderLastIndex();
-    // SetAlarm(heartbeatInterval); // QUESTION: Do we need this?
-    replicateEntries();
+    setMatchIndexToLeaderLastIndex();
+
+    // TODO call AssertLeadership
+    // create thread that calls invokePeriodicAppendEntries
+
     dbgprintf("[DEBUG] becomeLeader: Exiting function\n");
 }
 
+void ServerImplementation::invokePeriodicAppendEntries(){
+    while (1)
+    {
+        // broadcast AE
+        // sleep(heartbeat)
+    }
+}
+
+
 void ServerImplementation::setNextIndexToLeaderLastIndex() {
-    // TODO: Fix this
+    // TODO: Fix this for all hosts
     // int leaderLastIndex =  _stateHelper.GetNextIndex(_myIp);
     // _stateHelper.SetNextIndex(_myIp, leaderLastIndex);
 }
-        
+
+void ServerImplementation::setMatchIndexToLeaderLastIndex() {
+    // TODO: Fix this
+    // int leaderLastIndex =  _stateHelper.GetNextIndex(_myIp);
+    // _stateHelper.SetMatchIndex(_myIp, leaderLastIndex);
+}
+
+void ServerImplementation::dummySetHostList() {
+    // TODO: Move node list here
+}
+
+void ServerImplementation::dummyGetHostList() {
+    // TODO: Move node list here
+}
+
 void ServerImplementation::becomeFollower() {
     _stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
 }
@@ -436,13 +517,13 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
     my_term = _stateHelper.GetCurrentTerm();
     if (request->term() < my_term)
     {
-        dbgprintf("[DEBUG]: AppendEntries RPC - In Case 1\n");
+        dbgprintf("[DEBUG]: AppendEntries RPC - Recever's term > request term\n");
         reply->set_term(my_term);
         reply->set_success(false);
         return Status::OK;
     }
     // TODO: Test Case 1
-    // Case 2: Candidate receives valid AppenEntries RPC
+    // Case 2: Candidate receives valid AppendEntries RPC
     else 
     {
         dbgprintf("[DEBUG]: AppendEntries RPC - In Case 2a\n");
@@ -454,13 +535,26 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
         // Check if term at log index matches
         if (_stateHelper.GetTermAtIndex(request->prev_log_index()) != request->prev_log_term())
         {
+            dbgprintf("[DEBUG]: AppendEntries RPC - term mismatch at log index\n");
             reply->set_term(my_term);
             reply->set_success(false);
             return Status::OK;
+        } 
+        else 
+        {
+            // TODO: Add to log from all entries, call Insert(prev_log_index+1, )
+            // TODO: If LeaderCommitIdx > commitIdx 
+                // commitIdx = leaderCommitIdx
+                for(int i = _stateHelper.GetLastAppliedIndex(); i <= request->leader_commit_index(); i++)
+                {
+                    // exec all commands 
+                    _stateHelper.SetLastAppliedIndex(i); 
+                }
+            reply->set_term(my_term);
+            reply->set_success(true);
+            return Status::OK;
         }
     }
-
-    // TODO: Other cases
 
     dbgprintf("[DEBUG]: AppendEntries - Exiting RPC\n");
     return Status::OK;
@@ -470,11 +564,11 @@ Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteReques
 {
     return Status::OK;
 }
+
 Status ServerImplementation::AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply)
 {
     return Status::OK;
 }
-
 
 void RunServer(string my_ip, const std::vector<string>& hostList) {    
     /* TO-DO : Initialize GRPC connections to all other servers */
