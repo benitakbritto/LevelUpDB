@@ -67,6 +67,9 @@ string lb_addr = "0.0.0.0:50056";
 
 class KeyValueOpsServiceImpl final : public KeyValueOps::Service {
 
+    private:
+        StateHelper _stateHelper; // TODO: Make GLOBAL???
+        ServerImplementation serverImpl;
     public:
         Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override {
             dbgprintf("reached server\n");
@@ -75,18 +78,20 @@ class KeyValueOpsServiceImpl final : public KeyValueOps::Service {
 
         Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override {
             dbgprintf("reached server\n");
-            // cleanup apppendEntriesReply map
-            // append() to log
-            // broadcast AE 
-            // do {
-            //     // wait for majority
-            // } while();
             
-            // setCommitIdx(lastLogIdx)
-            // for i in[lastApplied+1, commitIdx]
-                // exec cmd at i
-                // lastApplied++
-
+            serverImpl.ClearAppendEntriesMap(); // TODO: Use instance of serverImpl ???
+            
+            _stateHelper.Append(_stateHelper.GetCurrentTerm(), request->key(), request->value());
+            
+            serverImpl.BroadcastAppendEntries();
+            
+            do {
+                // wait for majority
+            } while(!serverImpl.ReceivedMajority());
+            
+            _stateHelper.SetCommitIndex(_stateHelper.GetLogLength()-1); // TODO: -1? @Benita
+            serverImpl.ExecuteCommands(_stateHelper.GetLastAppliedIndex() + 1, _stateHelper.GetCommitIndex());
+            
             return Status::OK;
         }
 
@@ -192,7 +197,7 @@ void ServerImplementation::ServerInit(const std::vector<string>& o_hostList) {
     if (_myIp == "0.0.0.0:50000") becomeLeader();
 }
 
-bool ServerImplementation::receivedMajority() {
+bool ServerImplementation::ReceivedMajority() {
     int countSuccess = 0;
     for (auto& it: _appendEntriesResponseMap) {
         AppendEntriesReply replyReceived = it.second;
@@ -206,6 +211,10 @@ bool ServerImplementation::receivedMajority() {
         }
     }
     return false;
+}
+
+void ServerImplementation::ClearAppendEntriesMap() {
+    _appendEntriesResponseMap.clear();
 }
 
 /* Candidate starts a new election */
@@ -410,9 +419,9 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
 
 // TODO: Add params?
 // Node calls this function after it becomes a leader  
-void ServerImplementation::broadcastAppendEntries() 
+void ServerImplementation::BroadcastAppendEntries() 
 {
-    dbgprintf("[DEBUG] broadcastAppendEntries: Entering function\n");
+    dbgprintf("[DEBUG] BroadcastAppendEntries: Entering function\n");
     // setAlarm(_heartbeatInterval); // QUESTION: Is it needed?
 
     // TODO: Replace
@@ -453,7 +462,7 @@ void ServerImplementation::becomeLeader() {
 void ServerImplementation::invokePeriodicAppendEntries(){
     while (1)
     {
-        broadcastAppendEntries();
+        BroadcastAppendEntries();
         sleep(HB_SLEEP_IN_SEC);
     }
 }
@@ -545,7 +554,6 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
     dbgprintf("[DEBUG]: AppendEntries - Entering RPC\n");
     int my_term = 0;
 
-    // TODO: Test Case 1
     // Case 1: leader term < my term
     my_term = _stateHelper.GetCurrentTerm();
     if (request->term() < my_term)
@@ -555,7 +563,7 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
         reply->set_success(false);
         return Status::OK;
     }
-    // TODO: Test Case 1
+
     // Case 2: Candidate receives valid AppendEntries RPC
     else 
     {
@@ -591,7 +599,7 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
             {
                 _stateHelper.SetCommitIndex(request->leader_commit_index());
 
-                executeCommands(_stateHelper.GetLastAppliedIndex(), request->leader_commit_index());
+                ExecuteCommands(_stateHelper.GetLastAppliedIndex(), request->leader_commit_index());
                 
                 reply->set_term(my_term);
                 reply->set_success(true);
@@ -605,9 +613,9 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
 }
 
 
-void ServerImplementation::executeCommands(int start, int end) {
+void ServerImplementation::ExecuteCommands(int start, int end) {
     for(int i = start; i <= end; i++)
-    {   
+    {   // TODO: Uncomment after pulling cmake changes for leveldb from main 
         // levelDBWrapper.Put(_stateHelper.GetKeyAtIndex(i), _stateHelper.GetValueAtIndex(i));
         // TODO: check failure
         _stateHelper.SetLastAppliedIndex(i); 

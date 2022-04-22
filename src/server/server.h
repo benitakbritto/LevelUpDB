@@ -58,22 +58,19 @@ private:
   void invokeRequestVote(string host, std::atomic<int> *votesGained);
   bool requestVote(Raft::Stub* stub);
 
-  void broadcastAppendEntries();
   void invokeAppendEntries(string node_ip);
   void invokePeriodicAppendEntries();
-  
+
   void becomeFollower();
   void becomeCandidate();
   void becomeLeader();
 
-  bool receivedMajority();
   void setNextIndexToLeaderLastIndex();
   void setMatchIndexToLeaderLastIndex();
 
   vector<string> dummyGetHostList(); // TODO: Replace with getHostList
   void dummySetHostList();
 
-  void executeCommands(int start, int end);
   AppendEntriesRequest prepareRequestForAppendEntries(int nextIndex);
 
 
@@ -83,6 +80,10 @@ public:
   void Run();
   void Wait();
   void ServerInit(const std::vector<string>& o_hostList);
+  void ClearAppendEntriesMap();
+  void BroadcastAppendEntries();
+  bool ReceivedMajority();
+  void ExecuteCommands(int start, int end);
 
   Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
   Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
