@@ -43,7 +43,6 @@ private:
   std::map<string,std::unique_ptr<Raft::Stub>> _stubs; // TODO: use nodes
   const std::vector<std::string> _hostList; // TODO: use nodes
 
-  unordered_map <string, pair<int, unique_ptr<Raft::Stub>>> _nodeList;
   // LevelDBWrapper _levelDBWrapper;
   int _hostCount;
   int _votesGained;
@@ -73,7 +72,7 @@ private:
   vector<string> dummyGetHostList(); // TODO: Replace with getHostList
   void dummySetHostList();
 
-  AppendEntriesRequest prepareRequestForAppendEntries(int nextIndex);
+  AppendEntriesRequest prepareRequestForAppendEntries(string followerip, int nextIndex);
 
   int GetMajorityCount();
 

@@ -58,9 +58,11 @@ using namespace std;
  * GLOBALS
  *****************************************************************************/
 StateHelper g_stateHelper;
+ServerImplementation serverImpl;
+unordered_map <string, pair<int, unique_ptr<Raft::Stub>>> g_nodeList;
 
 // TODO: Use command line args
-string self_addr_lb = "0.0.0.0:50051";
+// string self_addr_lb = "0.0.0.0:50051";
 string lb_addr = "0.0.0.0:50052";
 
 /******************************************************************************
@@ -71,7 +73,7 @@ class KeyValueOpsServiceImpl final : public KeyValueOps::Service
 {
 
     private:
-        ServerImplementation serverImpl;
+        // ServerImplementation serverImpl;
 
     public:
         Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override {
@@ -105,16 +107,18 @@ class KeyValueOpsServiceImpl final : public KeyValueOps::Service
 
 void *RunKeyValueServer(void* args) 
 {
+    string ip = string((char *) args);
+    dbgprintf("[DEBUG]: %s: ip = %s\n", __func__, ip.c_str());
+
     KeyValueOpsServiceImpl service;
-    // string server_address(self_addr_lb);
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
     ServerBuilder builder;
-    builder.AddListeningPort(self_addr_lb, grpc::InsecureServerCredentials());
+    builder.AddListeningPort(ip, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     unique_ptr<Server> server(builder.BuildAndStart());
     
-    cout << "[INFO] KeyValue Server listening on "<< self_addr_lb << endl;
+    cout << "[INFO] KeyValue Server listening on "<< ip << endl;
     
     server->Wait();
     return NULL;
@@ -126,7 +130,7 @@ class LBNodeCommClient
         unique_ptr<LBNodeComm::Stub> stub_;
         int identity;
         string ip;
-        ServerImplementation serverImpl;
+        // ServerImplementation serverImpl;
   
     public:
         LBNodeCommClient(string target_str, int _identity, string _ip) {
@@ -164,9 +168,12 @@ class LBNodeCommClient
 
 void *StartHB(void* args) 
 {
+
+    string ip = string((char *) args);
+    dbgprintf("[DEBUG]: %s: ip = %s\n", __func__, ip.c_str());
     int identity_enum = LEADER;
 
-    LBNodeCommClient lBNodeCommClient(lb_addr, identity_enum, self_addr_lb);
+    LBNodeCommClient lBNodeCommClient(lb_addr, identity_enum, ip);
     lBNodeCommClient.SendHeartBeat();
 
     return NULL;
@@ -219,21 +226,27 @@ void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply)
     for (int i = 0; i < reply.node_data_size(); i++)
     {
         auto nodeData = reply.node_data(i);
-        _nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
+        g_nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
                                             Raft::NewStub(grpc::CreateChannel(nodeData.ip(), grpc::InsecureChannelCredentials())));
         // dbgprintf("%s : %d \n", nodeData.ip().c_str(), nodeData.identity());
     }
 }
 
-// TODO: Use nodes data structure
 int ServerImplementation::GetMajorityCount()
 {
-     return ((_hostList.size()/2) + 1);
+    return ((g_nodeList.size()/2) + 1);
 }
 
 bool ServerImplementation::ReceivedMajority() 
 {
+    // Leader is the only node alive
+    if (g_nodeList.size() == 1) 
+    {
+        return true;
+    }
+
     int countSuccess = 0;
+    
     for (auto& it: _appendEntriesResponseMap) {
         AppendEntriesReply replyReceived = it.second;
         if(replyReceived.success()) 
@@ -295,13 +308,14 @@ void ServerImplementation::invokeRequestVote(string host, atomic<int> *_votesGai
     // TODO: Request Vote Code here
 }
 
-AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (int nextIndex) 
+AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (string followerip, int nextIndex) 
 {
+    dbgprintf("[DEBUG] %s: Entering function with nextIndex = %d\n", __func__, nextIndex);
     AppendEntriesRequest request;
 
     int retryCount = 0;
     int logLength = g_stateHelper.GetLogLength();
-    int prevLogIndex = g_stateHelper.GetMatchIndex(_myIp);
+    int prevLogIndex = g_stateHelper.GetMatchIndex(followerip);
     int prevLogTerm = g_stateHelper.GetTermAtIndex(prevLogIndex);
 
     request.set_term(g_stateHelper.GetCurrentTerm()); 
@@ -324,6 +338,7 @@ AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (int n
         data->set_value(value);
     }
 
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
     return request;
 }
 // TODO: Test 
@@ -403,8 +418,8 @@ void ServerImplementation::invokeAppendEntries(string followerIp)
     // Retry the RPC until log is consistent
     do 
     {
-        request = prepareRequestForAppendEntries(nextIndex);
-        // TODO: Use stubs data structure
+        request = prepareRequestForAppendEntries(followerIp, nextIndex);
+        // TODO: Use nodeList data structure
         auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
 
         // Retry RPC indefinitely if follower is down
@@ -415,7 +430,7 @@ void ServerImplementation::invokeAppendEntries(string followerIp)
             reply.Clear();            
             
             status = stub->AppendEntries(&context, request, &reply);
-            
+            dbgprintf("[DEBUG]:  status code = %d\n", status.error_code());
             retryCount++;
             sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
 
@@ -423,6 +438,7 @@ void ServerImplementation::invokeAppendEntries(string followerIp)
       
         // Check if RPC should be retried because of log inconsistencies
         shouldRetry = (request.term() >= reply.term() && !reply.success());
+        dbgprintf("[DEBUG] %s: reply.term() = %d | reply.success() = %d\n", __func__, reply.term(), reply.success());
         dbgprintf("[DEBUG] %s: shouldRetry = %d\n", __func__, shouldRetry);
         // AppendEntries failed because of log inconsistencies
         if (shouldRetry) 
@@ -469,15 +485,14 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
 void ServerImplementation::BroadcastAppendEntries() 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-
-    // TODO: Replace
-    vector<string> nodes_list = dummyGetHostList();
-
-    for (int i = 0; i < nodes_list.size(); i++) 
+    dbgprintf("[DEBUG] %s: _nodeList.size() = %ld\n", __func__, g_nodeList.size());
+    for (auto& node: g_nodeList) 
     {
-        if (nodes_list[i] != _myIp) 
+        dbgprintf("[DEBUG]: ip of node %s \n", node.first.c_str());
+        if (node.first != _myIp) 
         {
-            thread(&ServerImplementation::invokeAppendEntries, this, nodes_list[i]).detach();
+            dbgprintf("[DEBUG]: going to call invokeAppendEntries\n");
+            thread(&ServerImplementation::invokeAppendEntries, this, node.first).detach();
         }
     }
     
@@ -501,8 +516,8 @@ void ServerImplementation::becomeLeader()
     setMatchIndexToLeaderLastIndex();
 
     // TODO call AssertLeadership
-
-    thread(&ServerImplementation::invokePeriodicAppendEntries, this).detach();
+    // TODO Uncomment later
+    // thread(&ServerImplementation::invokePeriodicAppendEntries, this).detach();
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
@@ -521,12 +536,9 @@ void ServerImplementation::setNextIndexToLeaderLastIndex()
 {
     int leaderLastIndex = g_stateHelper.GetLogLength();
 
-    // TODO: Replace
-    vector<string> nodes_list = dummyGetHostList();
-
-    for(string nodeIp: nodes_list) 
+    for(auto& node: g_nodeList) 
     {
-        g_stateHelper.SetNextIndex(nodeIp, leaderLastIndex);
+        g_stateHelper.SetNextIndex(node.first, leaderLastIndex);
     }
 }
 
@@ -534,12 +546,9 @@ void ServerImplementation::setMatchIndexToLeaderLastIndex()
 {
     int leaderLastIndex = g_stateHelper.GetLogLength();
     
-    // TODO: Replace
-    vector<string> nodes_list = dummyGetHostList();
-
-    for(string nodeIp: nodes_list) 
+    for(auto& node: g_nodeList) 
     {
-        g_stateHelper.SetMatchIndex(nodeIp, leaderLastIndex);
+        g_stateHelper.SetMatchIndex(node.first, leaderLastIndex);
     }
 }
 
@@ -626,9 +635,9 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
     // Case 2: Candidate receives valid AppendEntries RPC
     else 
     {
-        dbgprintf("[DEBUG]: AppendEntries RPC - Candidate received a valid AppendEntriesRPC, becoming follower\n");
         if (ServerIdentity::CANDIDATE)
         {
+            dbgprintf("[DEBUG]: AppendEntries RPC - Candidate received a valid AppendEntriesRPC, becoming follower\n");
             becomeFollower();
         }
 
@@ -656,6 +665,7 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
 
                 entries.push_back(entry);
             }
+
             g_stateHelper.Insert(request->prev_log_index()+1, entries);
 
             // Execute commands
@@ -664,11 +674,11 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
                 g_stateHelper.SetCommitIndex(request->leader_commit_index());
 
                 ExecuteCommands(g_stateHelper.GetLastAppliedIndex(), request->leader_commit_index());
-                
-                reply->set_term(my_term);
-                reply->set_success(true);
-                return Status::OK;
             }
+
+            reply->set_term(my_term);
+            reply->set_success(true);
+            return Status::OK;
         }
     }
 
@@ -703,31 +713,29 @@ Status ServerImplementation::AssertLeadership(ServerContext* context, const Asse
 
 void RunServer(string my_ip, const vector<string>& hostList) {    
     /* TO-DO : Initialize GRPC connections to all other servers */
-
-    ServerImplementation service;
-    service.SetMyIp(my_ip);
+    serverImpl.SetMyIp(my_ip);
     ServerBuilder builder;
-    builder.SetMaxReceiveMessageSize((1.5 * 1024 * 1024 * 1024));
-    builder.AddListeningPort(service.GetMyIp(), grpc::InsecureServerCredentials());
-    builder.RegisterService(&service);
+    // builder.SetMaxReceiveMessageSize((1.5 * 1024 * 1024 * 1024));
+    builder.AddListeningPort(serverImpl.GetMyIp(), grpc::InsecureServerCredentials());
+    builder.RegisterService(&serverImpl);
     unique_ptr<Server> server(builder.BuildAndStart());
-	dbgprintf("[INFO] Server is listening on %s\n", service.GetMyIp().c_str());
-    service.ServerInit(hostList);
+	dbgprintf("[INFO] Server is listening on %s\n", serverImpl.GetMyIp().c_str());
+    serverImpl.ServerInit(hostList);
     server->Wait();
 }
 
+// @usage: ./server <ip with port>
 int main(int argc, char **argv) {
     // TODO: Uncomment later
-    // pthread_t kv_server_t;
+    pthread_t kv_server_t;
     pthread_t hb_t;
     
-    // pthread_create(&kv_server_t, NULL, RunKeyValueServer, NULL);
-    pthread_create(&hb_t, NULL, StartHB, NULL);
+    pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
+    pthread_create(&hb_t, NULL, StartHB, argv[1]);
     vector<string> hostList;
     RunServer(argv[1], hostList);
     pthread_join(hb_t, NULL);
-    // pthread_join(kv_server_t, NULL);
-    
+    pthread_join(kv_server_t, NULL);
     
     return 0;
 }

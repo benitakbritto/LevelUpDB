@@ -17,7 +17,7 @@ enum ServerIdentity { LEADER, FOLLOWER, CANDIDATE};
 #define crash()                     if (CRASH_TEST) { *((char*)0) = 0; }
 #define REPLICATED_LOG_PATH         "/home/benitakbritto/CS739-P4/storage/replicated_log"
 #define TERM_VOTE_PATH              "/home/benitakbritto/CS739-P4/storage/term_vote"
-#define HB_SLEEP_IN_SEC             5
+#define HB_SLEEP_IN_SEC             100000 // TODO: Change later
 #define LEADER_STR                  "LEADER"
 #define FOLLOWER_STR                "FOLLOWER"
 #define RETRY_TIME_START             1                                     
