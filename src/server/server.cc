@@ -59,6 +59,7 @@ using namespace std;
  *****************************************************************************/
 StateHelper g_stateHelper;
 
+// TODO: Use command line args
 string self_addr_lb = "0.0.0.0:50051";
 string lb_addr = "0.0.0.0:50052";
 
@@ -214,12 +215,13 @@ void ServerImplementation::ServerInit(const vector<string>& o_hostList)
 
 void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply) 
 {
+    dbgprintf("[DEBUG] node size: %d \n", reply.node_data_size());
     for (int i = 0; i < reply.node_data_size(); i++)
     {
         auto nodeData = reply.node_data(i);
         _nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
                                             Raft::NewStub(grpc::CreateChannel(nodeData.ip(), grpc::InsecureChannelCredentials())));
-        dbgprintf("%s : %d \n", nodeData.ip().c_str(), nodeData.identity());
+        // dbgprintf("%s : %d \n", nodeData.ip().c_str(), nodeData.identity());
     }
 }
 
@@ -721,11 +723,11 @@ int main(int argc, char **argv) {
     
     // pthread_create(&kv_server_t, NULL, RunKeyValueServer, NULL);
     pthread_create(&hb_t, NULL, StartHB, NULL);
-
+    vector<string> hostList;
+    RunServer(argv[1], hostList);
     pthread_join(hb_t, NULL);
     // pthread_join(kv_server_t, NULL);
     
-    vector<string> hostList;
-    RunServer(argv[1], hostList);
+    
     return 0;
 }
