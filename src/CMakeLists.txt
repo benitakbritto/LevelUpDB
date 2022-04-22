@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.5.1)
 
 project(kvstore C CXX)
-add_subdirectory(third_party/leveldb)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/common" ${CMAKE_MODULE_PATH})
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/common/common.cmake)
 
@@ -87,7 +88,7 @@ add_custom_command(
       DEPENDS "${keyvalueops_proto}")
 
 # Include generated *.pb.h files
-include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${LEVELDB_INCLUDE_DIR}")
+include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${SNAPPY_INCLUDE_DIR}" "${LEVELDB_INCLUDE_DIR}")
 
 # Proto file 1
 add_library(comm_grpc_proto
@@ -164,6 +165,11 @@ target_link_libraries(state_helper
     replicated_log_persistent
     replicated_log_volatile
     state_volatile)
+
+add_executable(levelDBWrapper "util/levelDBWrapper.cc")
+target_link_libraries(levelDBWrapper  
+    ${LEVELDB_LIBRARY}
+    ${SNAPPY_LIBRARY})
 
 # Server
 foreach(_target

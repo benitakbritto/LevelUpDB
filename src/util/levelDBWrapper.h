@@ -1,6 +1,9 @@
 #ifndef LEVELDBWRAPPER_H
 #define LEVELDBWRAPPER_H
 
+#include "common.h"
+#include <thread>
+
 #include <cassert>
 #include <iostream>
 #include "leveldb/db.h"
@@ -27,6 +30,10 @@ class LevelDBWrapper {
         leveldb::Status status = DB::Open(options, "/tmp/testdb", &db);
         assert(status.ok());
         write_options.sync = true;
+    }
+
+    ~LevelDBWrapper(){
+        delete db;
     }
    
    leveldb::Status Get(string key, string &value);
