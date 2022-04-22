@@ -26,11 +26,11 @@ message AppendEntriesRequest {
     string leader_id = 2;
     uint32 prev_log_index = 3;
     uint32 prev_log_term = 4;
-    repeated LogEntry log_entry = 5;
-    uint32 leader_commit_idx = 6;
+    repeated SingleLogEntry log_entry = 5;
+    uint32 leader_commit_index = 6;
 }
 
-message LogEntry {
+message SingleLogEntry {
     uint32 log_index = 1;
     string key = 2;
     string value = 3;

@@ -27,5 +27,10 @@ Follow the commands mentioned [here](https://github.com/google/leveldb#getting-t
 ./keyvalue_client
 ```
 
+
+## Assumptions
+0. No network partitions : We can safely use matchIndex as the prevLogIndex, no follower would have a commitIndex > leaderCommitIndex
+1. Acc to Raft paper, If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry): We set it to leaderCommitIndex because of point 0
+
 ## Deliverables
 <TODO>
