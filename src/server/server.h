@@ -33,15 +33,17 @@ using blockstorage::ReqVoteRequest;
 using blockstorage::ReqVoteReply;
 using blockstorage::AssertLeadershipRequest;
 using blockstorage::AssertLeadershipReply;
+using blockstorage::HeartBeatReply;
 
 class ServerImplementation final : public Raft::Service {
 private: 
   unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
   MutexMap _lockHelper;
   string _myIp;
-  // StateHelper _stateHelper;
-  std::map<string,std::unique_ptr<Raft::Stub>> _stubs;
-  const std::vector<std::string> _hostList;
+  std::map<string,std::unique_ptr<Raft::Stub>> _stubs; // TODO: use nodes
+  const std::vector<std::string> _hostList; // TODO: use nodes
+
+  unordered_map <string, pair<int, unique_ptr<Raft::Stub>>> _nodeList;
   // LevelDBWrapper _levelDBWrapper;
   int _hostCount;
   int _votesGained;
@@ -86,6 +88,7 @@ public:
   void BroadcastAppendEntries();
   bool ReceivedMajority();
   void ExecuteCommands(int start, int end);
+  void BuildSystemStateFromHBReply(HeartBeatReply reply);
 
   Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
   Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
