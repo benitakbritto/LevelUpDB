@@ -13,6 +13,8 @@ for example, instead of `make -j` use `make -j 4`
  ### LevelDB Installation
 Follow the commands mentioned [here](https://github.com/google/leveldb#getting-the-source) and [here](https://github.com/google/leveldb#building) 
   
+ ### Snappy Installation
+ TODO
   
 ### Build
 #### Main source code
