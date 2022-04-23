@@ -23,14 +23,15 @@ message ReqVoteReply {
 
 message AppendEntriesRequest {
     uint32 term = 1;
-    string leaderID = 2;
-    uint32 prevLogIndex = 3;
-    uint32 prevLogTerm = 4;
-    repeated LogEntry logEntry = 5;
+    string leader_id = 2;
+    uint32 prev_log_index = 3;
+    uint32 prev_log_term = 4;
+    repeated SingleLogEntry log_entry = 5;
+    uint32 leader_commit_index = 6;
 }
 
-message LogEntry {
-    uint32 logIndex = 1;
+message SingleLogEntry {
+    uint32 term = 1;
     string key = 2;
     string value = 3;
 }

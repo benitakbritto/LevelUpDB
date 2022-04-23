@@ -26,7 +26,8 @@ using kvstore::PutReply;
  * DRIVER
  *****************************************************************************/
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) 
+{
     string target_str = "0.0.0.0:50051"; // LoadBalancer - acting as server for client
     KeyValueClient* keyValueClient = new KeyValueClient(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
     PutRequest request;
@@ -34,15 +35,12 @@ int main(int argc, char** argv) {
 
     request.set_key("k1");
     request.set_value("v1");
-    dbgprintf("About to contact LB");
+
+
+    dbgprintf("[DEBUG] Client contacting LB\n");
     Status putStatus = keyValueClient->PutToDB(request, &reply);
-    if(putStatus.error_code()!=0)
-    {
-        cout << putStatus.error_code() << endl;
-    }
-    else {
-        cout << "Success" << endl;
-    }
-    
+
+    cout << putStatus.error_code() << endl;
+     
     return 0;
 }

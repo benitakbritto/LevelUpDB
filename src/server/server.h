@@ -16,7 +16,7 @@
 #include "../util/locks.h"
 #include "../util/common.h"
 #include "../util/state_helper.h"
-
+// #include "../util/levelDBWrapper.h"
 #include <csignal>
 #include <ctime>
 #include <cerrno>
@@ -33,47 +33,65 @@ using kvstore::ReqVoteRequest;
 using kvstore::ReqVoteReply;
 using kvstore::AssertLeadershipRequest;
 using kvstore::AssertLeadershipReply;
+using kvstore::HeartBeatReply;
 
 class ServerImplementation final : public Raft::Service {
- public:
+private: 
+  unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
+  MutexMap _lockHelper;
+  string _myIp;
+  std::map<string,std::unique_ptr<Raft::Stub>> _stubs; // TODO: use nodes
+  const std::vector<std::string> _hostList; // TODO: use nodes
+
+  // LevelDBWrapper _levelDBWrapper;
+  int _hostCount;
+  atomic<int> _votesGained;
+  int _electionTimeout;
+
+  int _minElectionTimeout = 800;
+  int _maxElectionTimeout = 1600;
+  int _heartbeatInterval = 50;
+
+  void setAlarm(int after_us);
+  void resetElectionTimeout();
+
+  void runForElection();
+  void invokeRequestVote(string host);
+  bool requestVote(Raft::Stub* stub);
+  
+  void invokeAppendEntries(string node_ip);
+  void invokePeriodicAppendEntries();
+
+  void becomeFollower();
+  void becomeCandidate();
+  void becomeLeader();
+
+  void setNextIndexToLeaderLastIndex();
+  void setMatchIndexToLeaderLastIndex();
+
+  vector<string> dummyGetHostList(); // TODO: Replace with getHostList
+  void dummySetHostList();
+
+  AppendEntriesRequest prepareRequestForAppendEntries(string followerip, int nextIndex);
+
+  int GetMajorityCount();
+
+public:
+  void AlarmCallback();
+  void SetMyIp(string ip);
+  string GetMyIp();
   void Run();
   void Wait();
-  void serverInit(string ip);
-  MutexMap lockHelper;
-  string ip;
-  StateHelper stateHelper;
-  std::map<string,std::unique_ptr<Raft::Stub>> stubs;
-  vector<string> hostList;
-  std::atomic<int> votesGained;
+  void ServerInit();
+  void ClearAppendEntriesMap();
+  void BroadcastAppendEntries();
+  bool ReceivedMajority();
+  void ExecuteCommands(int start, int end);
+  void BuildSystemStateFromHBReply(HeartBeatReply reply);
 
   Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
   Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
   Status AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply) override;
-
-  void runForElection();
-  void replicateEntries();
-  void invokeRequestVote(string host);
-  void invokeAppendEntries(int o_id);
-  bool requestVote(Raft::Stub* stub);
-  void appendEntries();
-  void AlarmCallback();
-
-  void LeaderHB();
-  void sendLeaderHB(Raft::Stub* stub);
-  void invokeLeaderHB(string host);
-
-  void BecomeFollower();
-  void BecomeCandidate();
-  void BecomeLeader();
-
-  void SetAlarm(int after_us);
-  void ResetElectionTimeout();
-
-  int electionTimeout;
-
-  int minElectionTimeout = 8000;
-  int maxElectionTimeout = 16000;
-  int heartbeatInterval = 50;
 };
 
 #endif

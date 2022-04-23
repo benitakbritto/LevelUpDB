@@ -12,9 +12,10 @@ message HeartBeatRequest {
 }
 
 message HeartBeatReply {
-    repeated FollowerIP followerIP = 1;
+    repeated NodeData node_data = 1;
 }
 
-message FollowerIP {
+message NodeData {
     string ip = 1;
+    uint32 identity = 2;
 }

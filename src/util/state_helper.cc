@@ -79,6 +79,12 @@ void StateHelper::Insert(int start_index, vector<Entry> &entries)
 
     index = start_index;
     offset = vReplicatedLogObj.GetOffset(start_index);
+    if (offset == -1)
+    {
+        dbgprintf("[DEBUG]: Insert - offset == -1\n");
+        dbgprintf("[DEBUG]: Insert - Exiting function\n");
+        return;
+    }
     
     // preserve log up to offset bytes
     if (truncate(REPLICATED_LOG_PATH, offset) == -1)
@@ -116,6 +122,26 @@ int StateHelper::GetLogLength()
 int StateHelper::GetTermAtIndex(int index)
 {
     return vReplicatedLogObj.GetTerm(index);
+}
+
+/*
+*   @brief Get the key of the command at the specified index
+*
+*   @param index
+*/
+string StateHelper::GetKeyAtIndex(int index)
+{
+    return vReplicatedLogObj.GetKey(index);
+}
+
+/*
+*   @brief Get the value of the command at the specified index
+*
+*   @param index
+*/
+string StateHelper::GetValueAtIndex(int index)
+{
+    return vReplicatedLogObj.GetValue(index);
 }
 
 /*
@@ -229,6 +255,7 @@ void StateHelper::SetNextIndex(string serverId, int value)
 */
 int StateHelper::GetNextIndex(string serverId)
 {
+    dbgprintf("[DEBUG]: %s\n", __func__);
     return vStateObj.GetNextIndex(serverId);
 }
 
@@ -251,6 +278,7 @@ void StateHelper::SetMatchIndex(string serverId, int value)
 */
 int StateHelper::GetMatchIndex(string serverId)
 {
+    dbgprintf("[DEBUG]: %s\n", __func__);
     return vStateObj.GetMatchIndex(serverId);
 }
 

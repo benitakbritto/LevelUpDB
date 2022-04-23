@@ -72,11 +72,13 @@ class LBNodeCommService final: public LBNodeComm::Service {
 
         void registerNode(int identity, string ip) {
             nodes[ip] = make_pair(identity,
-                            new KeyValueClient (grpc::CreateChannel("0.0.0.0:50056", grpc::InsecureChannelCredentials())));
+                            new KeyValueClient (grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
+            dbgprintf("[DEBUG]: Length of nodes at LB: %ld", nodes.size());
         }
 
         void eraseNode(string ip) {
             nodes.erase(ip);
+            dbgprintf("[DEBUG]: Removed ip %s, Length of nodes at LB: %ld\n", ip.c_str(), nodes.size());
         }
 
         void updateLeader(string ip) {
@@ -85,6 +87,16 @@ class LBNodeCommService final: public LBNodeComm::Service {
             }
             leaderIP = ip;
             nodes[leaderIP].first = LEADER;
+        }
+
+        void addNodeDataToReply(HeartBeatReply* reply) {
+            NodeData* nodeData;
+            for (auto& it: nodes) 
+            {
+                nodeData = reply->add_node_data();
+                nodeData->set_ip(it.first);
+                nodeData->set_identity(it.second.first);
+            }
         }
 
     public:
@@ -96,8 +108,7 @@ class LBNodeCommService final: public LBNodeComm::Service {
 
             int identity;
             string ip;
-            bool first_time = true;
-            // TODO: create client on the fly
+            bool registerFirstTime = true;
 
             while(1) {
                 if(!stream->Read(&request)) {
@@ -107,11 +118,19 @@ class LBNodeCommService final: public LBNodeComm::Service {
 
                 identity = request.identity();
                 ip = request.ip();
-                registerNode(identity, ip);
+
+                if(registerFirstTime) {
+                    dbgprintf("[DEBUG]: Registering node %s for the 1st time\n", ip.c_str());
+                    registerNode(identity, ip);
+                }
+                registerFirstTime = false;
                 
                 if(identity == LEADER){
                     updateLeader(ip);
                 }
+                reply.Clear();
+                addNodeDataToReply(&reply);
+                
                 if(!stream->Write(reply)) {
                     break;
                 }
