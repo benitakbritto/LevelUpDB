@@ -17,7 +17,7 @@ using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
 using grpc::ServerReaderWriter; 
-using namespace blockstorage;
+using namespace kvstore;
 using namespace std;
 
 /******************************************************************************

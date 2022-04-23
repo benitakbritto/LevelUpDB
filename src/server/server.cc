@@ -33,7 +33,8 @@
 #include <grpcpp/health_check_service_interface.h>
 
 #include "server.h"
-
+#include "lb.grpc.pb.h"
+// #include "../util/levelDBWrapper.h" // TODO: Uncomment later
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -47,7 +48,7 @@ using grpc::StatusCode;
 using grpc::Service;
 using grpc::ClientContext;
 using grpc::ClientReaderWriter;
-using namespace blockstorage;
+using namespace kvstore;
 using namespace std;
 
 /******************************************************************************
@@ -179,11 +180,6 @@ void *StartHB(void* args)
     return NULL;
 }
 
-void signalHandler(int signum) 
-{
-	return;
-}
-
 void ServerImplementation::SetMyIp(string ip)
 {
     _myIp = ip;
@@ -193,15 +189,28 @@ string ServerImplementation::GetMyIp()
 {
     return _myIp;
 }
+ServerImplementation* signalHandlerService;// TODO: Move to global
+void signalHandler(int signum) {
+    signalHandlerService->AlarmCallback();
+	return;
+}
 
-void ServerImplementation::ServerInit(const vector<string>& o_hostList) 
+// TODO: Fix param
+void ServerImplementation::ServerInit() 
 {    
     dbgprintf("[DEBUG]: %s: Inside function\n", __func__);
-    g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);    
+    // hostList = {"0.0.0.0:50051", "0.0.0.0:50052", "0.0.0.0:50053"};
+
+    //Initialize states
     g_stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
-    
+    g_stateHelper.SetCommitIndex(0);
+    g_stateHelper.SetLastAppliedIndex(0);
+    // g_stateHelper.Append(0, "NULL", "NULL"); // To-Do: Need some initial data on file creation. Not a problem if file already exists.
+
     int old_errno = errno;
     errno = 0;
+    cout<<"[INIT] Server Init"<<endl;
     signal(SIGALRM, &signalHandler);
     
     if (errno) 
@@ -210,6 +219,9 @@ void ServerImplementation::ServerInit(const vector<string>& o_hostList)
         errno = old_errno;
         return;
     }
+
+    signalHandlerService = this;
+
     errno = old_errno;
     srand(time(NULL));
     resetElectionTimeout();
@@ -268,33 +280,39 @@ void ServerImplementation::ClearAppendEntriesMap()
 /* Candidate starts a new election */
 void ServerImplementation::runForElection() 
 {
-
     int initialTerm = g_stateHelper.GetCurrentTerm();
+    g_stateHelper.AddCurrentTerm(g_stateHelper.GetCurrentTerm() + 1);
 
     /* Vote for self - hence 1*/
-    atomic<int> _votesGained(1);
+    _votesGained = 1;
+    g_stateHelper.AddVotedFor(g_stateHelper.GetCurrentTerm(), GetMyIp());
+
+    /*Reset Election Timer*/
+    resetElectionTimeout();
+    setAlarm(_electionTimeout);
+
+    /* Send RequestVote RPCs to all servers */
+    // TODO: Use _nodeList instead
     for (int i = 0; i < _hostList.size(); i++) {
-        if (_hostList[i] != _myIp) {
-        thread(&ServerImplementation::invokeRequestVote, this, _hostList[i], &_votesGained).detach();
+        if (_hostList[i] != GetMyIp()) {
+            std::thread(&ServerImplementation::invokeRequestVote, this, _hostList[i]).detach();
         }
     }
-    /* OPTIONAL - Can add sleep(_electionTimeout */
-    sleep(1); //election timeout
-    // while (_votesGained <= _hostCount/2 && nodeState == ServerIdentity::CANDIDATE &&
-    //         currentTerm == initialTerm) {
-    // }
 
-    if (_votesGained > _hostCount/2 && g_stateHelper.GetCurrentTerm() == ServerIdentity::CANDIDATE) {
+    sleep(2);
+    //cout<<"Woken up: " <<_votesGained<<endl;
+    // TODO: Use _nodeList instead
+    if (_votesGained > _hostList.size()/2 && g_stateHelper.GetIdentity() == ServerIdentity::CANDIDATE) {
+        cout<<"[INFO] Candidate received majority of "<<_votesGained<<endl;
+        cout<<"[INFO] Change Role to LEADER for term"<<g_stateHelper.GetCurrentTerm()<<endl;
         becomeLeader();
     }
 }
         
-void ServerImplementation::invokeRequestVote(string host, atomic<int> *_votesGained) 
-{
-    ClientContext context;
-    context.set_deadline(chrono::system_clock::now() + 
-        chrono::milliseconds(_heartbeatInterval));
+void ServerImplementation::invokeRequestVote(string host) {
 
+    cout<<"[INFO]: Sending Request Vote to "<<host;
+    // TODO : Use nodeList instead
     if(_stubs[host].get()==nullptr)
     {
         _stubs[host] = Raft::NewStub(grpc::CreateChannel(host, grpc::InsecureChannelCredentials()));
@@ -304,7 +322,6 @@ void ServerImplementation::invokeRequestVote(string host, atomic<int> *_votesGai
     {
         _votesGained++;
     }
-    // TODO: Request Vote Code here
 }
 
 AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (string followerip, int nextIndex) 
@@ -340,63 +357,6 @@ AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (strin
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
     return request;
 }
-// TODO: Test 
-// Leader makes this call to other nodes  
-// void ServerImplementation::invokeAppendEntries(string followerIp) 
-// {
-//     dbgprintf("[DEBUG] invokeAppendEntries: Entering function\n");
-//     // context.set_deadline(chrono::system_clock::now() + 
-//     //     chrono::milliseconds(_heartbeatInterval)); // QUESTION: Do we need this?
-    
-//     AppendEntriesRequest request;
-//     AppendEntriesReply reply;
-//     Status status;
-//     int retryCount = 0;
-
-//     int logLength = g_stateHelper.GetLogLength();
-//     int prevLogIndex = logLength-1; // TODO: Change on retry
-//     int prevLogTerm = g_stateHelper.GetTermAtIndex(prevLogIndex);
-//     int nextIndex = g_stateHelper.GetNextIndex();
-
-//     // TODO: Get stub from a global data structure
-//     auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
-
-//     // Retry w backoff
-//     do
-//     {
-//         ClientContext context;
-//         reply.Clear();
-//         sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
-        
-//         status = stub->AppendEntries(&context, request, &reply);
-        
-//         retryCount++;
-//     } while (status.error_code() == StatusCode::UNAVAILABLE);
-
-//     dbgprintf("Status ok = %d\n", status.ok());
-//     _appendEntriesResponseMap[followerIp] = reply;
-
-//     // Check the reply of the RPC
-//     if (request.term() < reply.term())
-//     {
-//         // Leader becomes follower
-//         becomeFollower();
-//         return;
-//     }
-//     // TODO: Retry RPC with different next index
-//     else if (reply.success() == false)
-//     {
- 
-//     }
-//     // AppendEntries was successful for node
-//     else if (reply.success() == true)
-//     {
-//         g_stateHelper.SetMatchIndex(followerIp, logLength - 1);
-//     }
-
-
-//     dbgprintf("[DEBUG]: invokeAppendEntries: Exiting function\n");
-// }
         
 void ServerImplementation::invokeAppendEntries(string followerIp) 
 {
@@ -465,6 +425,7 @@ void ServerImplementation::invokeAppendEntries(string followerIp)
 
 bool ServerImplementation::requestVote(Raft::Stub* stub) {
     ReqVoteRequest req;
+
     req.set_term(g_stateHelper.GetCurrentTerm());
     req.set_candidateid(_myIp);
     req.set_lastlogindex(g_stateHelper.GetLogLength());
@@ -472,12 +433,17 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
 
     ReqVoteReply reply;
     ClientContext context;
+    context.set_deadline(chrono::system_clock::now() + 
+        chrono::milliseconds(_heartbeatInterval));
 
-    Status status = stub->ReqVote(&context, req, &reply);
+    grpc::Status status = stub->ReqVote(&context, req, &reply);
 
     setAlarm(_electionTimeout);
 
-    return status.ok()? 1 : 0;
+    if(status.ok() && reply.votegrantedfor())
+        return true;
+    
+    return false;
 }
 
 // Node calls this function after it becomes a leader  
@@ -571,21 +537,22 @@ void ServerImplementation::becomeFollower()
         
 /* 
     Invoked when timeout signal is received - 
-    Increment current term and run for election
-
-    TO-DO: Do not invoke if can_vote == false
 */
 
 void ServerImplementation::becomeCandidate() {
     g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
-    g_stateHelper.AddCurrentTerm(g_stateHelper.GetCurrentTerm() + 1);
     dbgprintf("INFO] Become Candidate\n");
-
-
-    // TODO: Additional things here
     resetElectionTimeout();
     setAlarm(_electionTimeout);
     runForElection();
+}
+
+void ServerImplementation::AlarmCallback() {
+  if (g_stateHelper.GetIdentity() == ServerIdentity::LEADER) {
+    //ReplicateEntries();
+  } else {
+    becomeCandidate();
+  }
 }
 
 void ServerImplementation::resetElectionTimeout() {
@@ -699,17 +666,64 @@ void ServerImplementation::ExecuteCommands(int start, int end)
 
 Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
 {
-    return Status::OK;
+    cout<<"Received reqvote from "<<request->candidateid()<<" --- "<<request->term()<<endl;
+
+    reply->set_votegrantedfor(false);
+    reply->set_term(g_stateHelper.GetCurrentTerm());
+
+    if(request->term() < g_stateHelper.GetCurrentTerm())
+    {
+        return grpc::Status::OK;
+    }
+
+    if(request->term() > g_stateHelper.GetCurrentTerm())
+    {
+        g_stateHelper.AddCurrentTerm(request->term());
+        g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    }
+
+    if(g_stateHelper.GetVotedFor(request->term())=="" || g_stateHelper.GetVotedFor(request->term()) == request->candidateid())
+    {
+        if(request->lastlogterm() > g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength() - 1))
+        {
+            g_stateHelper.AddVotedFor(request->term(), request->candidateid());
+            reply->set_votegrantedfor(true);
+
+            return grpc::Status::OK;
+        }
+
+        if(request->lastlogterm() == g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength() - 1))
+        {
+            if(request->lastlogindex() > g_stateHelper.GetLogLength()-1)
+            {
+                reply->set_votegrantedfor(true);
+
+                return grpc::Status::OK;
+            }
+        }
+    }
+
+    return grpc::Status::CANCELLED;
 }
 
-// TODO: Why do we need this here? Should only be on the LB @Shreyansh @Benita
 
-Status ServerImplementation::AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply)
+// TODO
+/* Currently using AssertLeadership as heartbeat from leader to nodes. Will be using AppendEntries */
+grpc::Status ServerImplementation::AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply)
 {
-    return Status::OK;
+    cout<<"[INFO]: Received HB from Leader"<<endl;
+
+    g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    resetElectionTimeout();
+    setAlarm(_electionTimeout);
+    
+    return grpc::Status::OK;
 }
 
-void RunServer(string my_ip, const vector<string>& hostList) {    
+
+void RunServer(string my_ip) {
+    //string server_address("0.0.0.0:50051");
+
     /* TO-DO : Initialize GRPC connections to all other servers */
     serverImpl.SetMyIp(my_ip);
     ServerBuilder builder;
@@ -717,8 +731,9 @@ void RunServer(string my_ip, const vector<string>& hostList) {
     builder.AddListeningPort(serverImpl.GetMyIp(), grpc::InsecureServerCredentials());
     builder.RegisterService(&serverImpl);
     unique_ptr<Server> server(builder.BuildAndStart());
-	dbgprintf("[INFO] Server is listening on %s\n", serverImpl.GetMyIp().c_str());
-    serverImpl.ServerInit(hostList);
+	dbgprintf("[INFO] Server is live\n");
+
+    serverImpl.ServerInit();
     server->Wait();
 }
 
@@ -731,7 +746,7 @@ int main(int argc, char **argv) {
     pthread_create(&hb_t, NULL, StartHB, argv[1]);
 
     vector<string> hostList;
-    RunServer(argv[1], hostList);
+    RunServer(argv[1]);
 
     pthread_join(hb_t, NULL);
     pthread_join(kv_server_t, NULL);

@@ -26,14 +26,14 @@ using grpc::Status;
 using grpc::Server;
 using grpc::ServerContext;
 using grpc::ServerCompletionQueue;
-using blockstorage::Raft;
-using blockstorage::AppendEntriesRequest;
-using blockstorage::AppendEntriesReply;
-using blockstorage::ReqVoteRequest;
-using blockstorage::ReqVoteReply;
-using blockstorage::AssertLeadershipRequest;
-using blockstorage::AssertLeadershipReply;
-using blockstorage::HeartBeatReply;
+using kvstore::Raft;
+using kvstore::AppendEntriesRequest;
+using kvstore::AppendEntriesReply;
+using kvstore::ReqVoteRequest;
+using kvstore::ReqVoteReply;
+using kvstore::AssertLeadershipRequest;
+using kvstore::AssertLeadershipReply;
+using kvstore::HeartBeatReply;
 
 class ServerImplementation final : public Raft::Service {
 private: 
@@ -45,7 +45,7 @@ private:
 
   // LevelDBWrapper _levelDBWrapper;
   int _hostCount;
-  int _votesGained;
+  atomic<int> _votesGained;
   int _electionTimeout;
 
   int _minElectionTimeout = 800;
@@ -56,9 +56,9 @@ private:
   void resetElectionTimeout();
 
   void runForElection();
-  void invokeRequestVote(string host, std::atomic<int> *votesGained);
+  void invokeRequestVote(string host);
   bool requestVote(Raft::Stub* stub);
-
+  
   void invokeAppendEntries(string node_ip);
   void invokePeriodicAppendEntries();
 
@@ -76,13 +76,13 @@ private:
 
   int GetMajorityCount();
 
-
 public:
+  void AlarmCallback();
   void SetMyIp(string ip);
   string GetMyIp();
   void Run();
   void Wait();
-  void ServerInit(const std::vector<string>& o_hostList);
+  void ServerInit();
   void ClearAppendEntriesMap();
   void BroadcastAppendEntries();
   bool ReceivedMajority();

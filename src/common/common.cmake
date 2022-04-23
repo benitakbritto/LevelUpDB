@@ -121,3 +121,6 @@ else()
     set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
   endif()
 endif()
+
+find_package(LEVELDB REQUIRED)
+message(STATUS "Using LEVELDB libs ${LEVELDB}")
