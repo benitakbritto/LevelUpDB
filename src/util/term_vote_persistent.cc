@@ -4,7 +4,7 @@
 
 PersistentTermVote::PersistentTermVote()
 {
-    string file_path = TERM_VOTE_PATH;
+    string file_path = TERM_VOTE_PATH + to_string(getpid());
     fd = open(file_path.c_str(), O_WRONLY |  O_APPEND | O_CREAT, 0666);
 
     if (fd == -1) 

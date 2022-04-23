@@ -93,7 +93,7 @@ class KeyValueOpsServiceImpl final : public KeyValueOps::Service
             
             // wait for majority
             do {
-                dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
+                // dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
             } while(!serverImpl.ReceivedMajority());
             
             g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1);
@@ -215,8 +215,6 @@ void ServerImplementation::ServerInit(const vector<string>& o_hostList)
     resetElectionTimeout();
     setAlarm(_electionTimeout);
 
-    // TODO: Remove later
-    if (_myIp == "0.0.0.0:50000") becomeLeader();
     dbgprintf("[DEBUG]: %s: Exiting function\n", __func__);
 }
 
@@ -234,7 +232,8 @@ void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply)
 
 int ServerImplementation::GetMajorityCount()
 {
-    return ((g_nodeList.size()/2) + 1);
+    int size = g_nodeList.size();
+    return (size % 2 == 0) ? (size / 2) : (size / 2) + 1;
 }
 
 bool ServerImplementation::ReceivedMajority() 
@@ -509,7 +508,6 @@ void ServerImplementation::becomeLeader()
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
 
-    g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE); // TODO: Remove later
     g_stateHelper.SetIdentity(ServerIdentity::LEADER);
 
     setNextIndexToLeaderLastIndex();
@@ -726,14 +724,15 @@ void RunServer(string my_ip, const vector<string>& hostList) {
 
 // @usage: ./server <ip with port>
 int main(int argc, char **argv) {
-    // TODO: Uncomment later
     pthread_t kv_server_t;
     pthread_t hb_t;
     
     pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
     pthread_create(&hb_t, NULL, StartHB, argv[1]);
+
     vector<string> hostList;
     RunServer(argv[1], hostList);
+
     pthread_join(hb_t, NULL);
     pthread_join(kv_server_t, NULL);
     

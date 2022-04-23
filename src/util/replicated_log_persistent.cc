@@ -2,13 +2,15 @@
 // TODO: Add to cmake
 
 #include "replicated_log_persistent.h"
+#include <sys/types.h>
+#include <unistd.h>
 
 /*
 *   @brief Gets file descriptor of log file
 */
 PersistentReplicatedLog::PersistentReplicatedLog()
 {
-    string log_file_path = REPLICATED_LOG_PATH;
+    string log_file_path = REPLICATED_LOG_PATH + to_string(getpid());
     fd = open(log_file_path.c_str(), O_WRONLY | O_CREAT, 0666);
 
     if (fd == -1) 

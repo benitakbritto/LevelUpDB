@@ -28,6 +28,7 @@ Status KeyValueClient::PutToDB(PutRequest request, PutReply* reply)
         // PutReply reply;
         ClientContext context;
         status = stub_->PutToDB(&context, request, reply);
+        dbgprintf("[DEBUG] %s: status = %d\n", __func__, status.error_code());
         attempt++;
     } while(attempt < 3 && status.error_code() != grpc::StatusCode::OK);
 
