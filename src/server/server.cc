@@ -22,7 +22,6 @@
 #include <sys/time.h>
 #include <cerrno>
 #include <ctime>
-
 #include <grpc++/grpc++.h>
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
@@ -31,10 +30,13 @@
 #include "raft.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
-
-#include "server.h"
 #include "lb.grpc.pb.h"
-// #include "../util/levelDBWrapper.h" // TOFIX: Build is failing
+#include "key_value_server.h"
+#include "lb_comm_server.h"
+#include "../util/common.h"
+#include "../util/state_helper.h"
+#include "raft_server.h"
+// #include "../util/levelDBWrapper.h" // TODO: Build failing
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -58,16 +60,11 @@ using namespace std;
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
-string lb_addr = "0.0.0.0:50052";
-
 StateHelper g_stateHelper;
-ServerImplementation serverImpl;
+RaftServer serverImpl;
 unordered_map <string, pair<int, unique_ptr<Raft::Stub>>> g_nodeList;
-ServerImplementation* signalHandlerService;
-
-/******************************************************************************
- * DECLARATION
- *****************************************************************************/
+RaftServer* signalHandlerService;
+LBNodeCommClient* lBNodeCommClient; 
 
 // for debug
 void PrintNodesInNodeList()
@@ -78,41 +75,37 @@ void PrintNodesInNodeList()
     }
 }
 
-class KeyValueOpsServiceImpl final : public KeyValueOps::Service 
+/******************************************************************************
+ * DECLARATION: KeyValueOpsServiceImpl
+ *****************************************************************************/
+// TODO: use leveldb
+Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply)  
 {
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+    return Status::OK;
+}
 
-    private:
-        // ServerImplementation serverImpl;
-
-    public:
-        Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override {
-            dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-            dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
-            return Status::OK;
-        }
-
-        Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override 
-        {
-            dbgprintf("[DEBUG] %s: Entering function\n", __func__);            
-            serverImpl.ClearAppendEntriesMap();
+Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply)  
+{
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);            
+    serverImpl.ClearAppendEntriesMap();
             
-            g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value());
+    g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value());        
+    serverImpl.BroadcastAppendEntries();
             
-            serverImpl.BroadcastAppendEntries();
+    // wait for majority
+    do 
+    {
+        // dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
+    } while(!serverImpl.ReceivedMajority());
             
-            // wait for majority
-            do {
-                // dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
-            } while(!serverImpl.ReceivedMajority());
+    g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1);
+    serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
             
-            g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1);
-            serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
-            
-            dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
-            return Status::OK;
-        }
-
-};
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+    return Status::OK;
+}
 
 void *RunKeyValueServer(void* args) 
 {
@@ -133,123 +126,112 @@ void *RunKeyValueServer(void* args)
     return NULL;
 }
 
-class LBNodeCommClient 
+/******************************************************************************
+ * DECLARATION: LBNodeCommClient
+ *****************************************************************************/
+void LBNodeCommClient::updateFollowersInNodeList(AssertLeadershipReply *reply)
 {
-private:
-    unique_ptr<LBNodeComm::Stub> stub_;
-    int identity;
-    string ip;
-    
-    // TOFIX: giving error E0424 05:31:57.689696293  370400 dns_resolver_ares.cc:477]   no server name supplied in dns URI
-    void updateFollowersInNodeList(AssertLeadershipReply *reply)
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+    for (int i = 0; i < reply->follower_ip_size(); i++)
     {
-        dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-        for (int i = 0; i < reply->follower_ip_size(); i++)
+        auto nodeData = reply->follower_ip(i);
+        string ip = nodeData.ip();
+        dbgprintf("[DEBUG] %s: ip = %s\n", __func__, ip.c_str());
+        // new node
+        if (g_nodeList.count(ip) == 0)
         {
-            auto nodeData = reply->follower_ip(i);
-            string ip = nodeData.ip();
-            dbgprintf("[DEBUG] %s: ip = %s\n", __func__, ip.c_str());
-            // new node
-            if (g_nodeList.count(ip) == 0)
-            {
-                g_nodeList[ip] = make_pair(FOLLOWER, 
+            g_nodeList[ip] = make_pair(FOLLOWER, 
                                             Raft::NewStub(grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
-            }
-            // old node, update identity
-            else
-            {
-                g_nodeList[ip].first = FOLLOWER;
-            }
-
-            // TODECIDE: Should we delete nodes?
         }
-        dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
-    }
-  
-public:
-    LBNodeCommClient(string target_str, int _identity, string _ip) {
-            identity = _identity;
-            stub_ = LBNodeComm::NewStub(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
-            ip = _ip;
-        }
-
-    void SendHeartBeat() {
-            ClientContext context;
-            
-            shared_ptr<ClientReaderWriter<HeartBeatRequest, HeartBeatReply> > stream(
-                stub_->SendHeartBeat(&context));
-
-            HeartBeatReply reply;
-            HeartBeatRequest request;
-            request.set_ip(ip);
-
-            while(1) {
-                request.set_identity(identity);
-                stream->Write(request);
-                dbgprintf("INFO] SendHeartBeat: sent heartbeat\n");
-
-                stream->Read(&reply);
-                dbgprintf("[INFO] SendHeartBeat: recv heartbeat response\n");
-                
-                // TODO : Parse reply to get sys state
-                serverImpl.BuildSystemStateFromHBReply(reply);
-
-                dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
-                sleep(HB_SLEEP_IN_SEC);
-            }
-        }
-
-    void InvokeAssertLeadership()
-    {
-        dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-        AssertLeadershipRequest request;
-        AssertLeadershipReply reply;
-        Status status;
-        int retryCount = 0;
-
-        request.set_leader_ip(serverImpl.GetMyIp());
-
-        do
+        // old node, update identity
+        else
         {
-            ClientContext context;
-            reply.Clear();            
-                
-            status = stub_->AssertLeadership(&context, request, &reply);
-            dbgprintf("[DEBUG]: status code = %d\n", status.error_code());
-            retryCount++;
-            sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
+            g_nodeList[ip].first = FOLLOWER;
+        }
 
-        } while (status.error_code() == StatusCode::UNAVAILABLE);
-
-        updateFollowersInNodeList(&reply);
-        dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+        // TODECIDE: Should we delete nodes?
     }
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+}
+  
+LBNodeCommClient::LBNodeCommClient(string _lb_addr) 
+{
+    stub_ = LBNodeComm::NewStub(grpc::CreateChannel(_lb_addr, grpc::InsecureChannelCredentials()));
+}
 
-};
+void LBNodeCommClient::SendHeartBeat() 
+{
+    ClientContext context;
+            
+    shared_ptr<ClientReaderWriter<HeartBeatRequest, HeartBeatReply> > stream(
+                (LBNodeCommClient::stub_)->SendHeartBeat(&context));
 
-LBNodeCommClient lBNodeCommClient(lb_addr, LEADER, lb_addr); // TODO: find better way to do this
+    HeartBeatReply reply;
+    HeartBeatRequest request;
+    request.set_ip(serverImpl.GetMyIp());
+
+    while(1) 
+    {
+        request.set_identity(g_stateHelper.GetIdentity());
+        stream->Write(request);
+        dbgprintf("INFO] SendHeartBeat: sent heartbeat\n");
+
+        stream->Read(&reply);
+        dbgprintf("[INFO] SendHeartBeat: recv heartbeat response\n");
+                
+        // TODO : Parse reply to get sys state - is this done?
+        serverImpl.BuildSystemStateFromHBReply(reply);
+
+        dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
+        sleep(HB_SLEEP_IN_SEC);
+    }
+}
+
+void LBNodeCommClient::InvokeAssertLeadership()
+{
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+    AssertLeadershipRequest request;
+    AssertLeadershipReply reply;
+    Status status;
+    int retryCount = 0;
+
+    request.set_leader_ip(serverImpl.GetMyIp());
+
+    do
+    {
+        ClientContext context;
+        reply.Clear();            
+                
+        status = stub_->AssertLeadership(&context, request, &reply);
+        dbgprintf("[DEBUG]: status code = %d\n", status.error_code());
+        retryCount++;
+        sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
+
+    } while (status.error_code() == StatusCode::UNAVAILABLE);
+
+    updateFollowersInNodeList(&reply);
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+}
 
 void *StartHB(void* args) 
 {
-
-    string ip = string((char *) args);
-    dbgprintf("[DEBUG]: %s: ip = %s\n", __func__, ip.c_str());
-    int identity_enum = LEADER;
-
-    // TODO: To we need identity_enum?
-    // LBNodeCommClient lBNodeCommClient(lb_addr, identity_enum, ip);
-    lBNodeCommClient.SendHeartBeat();
+    string lb_addr = string((char *) args);
+    dbgprintf("[DEBUG] lb_addr = %s\n", lb_addr.c_str());
+    lBNodeCommClient = new LBNodeCommClient(lb_addr); 
+    lBNodeCommClient->SendHeartBeat();
 
     return NULL;
 }
 
-
-void ServerImplementation::SetMyIp(string ip)
+/******************************************************************************
+ * DECLARATION: Raft
+ *****************************************************************************/
+void RaftServer::SetMyIp(string ip)
 {
     _myIp = ip;
 }
 
-string ServerImplementation::GetMyIp()
+string RaftServer::GetMyIp()
 {
     return _myIp;
 }
@@ -260,7 +242,7 @@ void signalHandler(int signum) {
 }
 
 // TODO: Fix param - is it fixed?
-void ServerImplementation::ServerInit() 
+void RaftServer::ServerInit() 
 {    
     dbgprintf("[DEBUG]: %s: Inside function\n", __func__);
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);    
@@ -294,7 +276,7 @@ void ServerImplementation::ServerInit()
     dbgprintf("[DEBUG]: %s: Exiting function\n", __func__);
 }
 
-void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply) 
+void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply) 
 {
     dbgprintf("[DEBUG] node size: %d \n", reply.node_data_size());
     for (int i = 0; i < reply.node_data_size(); i++)
@@ -305,13 +287,13 @@ void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply)
     }
 }
 
-int ServerImplementation::GetMajorityCount()
+int RaftServer::GetMajorityCount()
 {
     int size = g_nodeList.size();
     return (size % 2 == 0) ? (size / 2) : (size / 2) + 1;
 }
 
-bool ServerImplementation::ReceivedMajority() 
+bool RaftServer::ReceivedMajority() 
 {
     // Leader is the only node alive
     if (g_nodeList.size() == 1) 
@@ -335,13 +317,13 @@ bool ServerImplementation::ReceivedMajority()
     return false;
 }
 
-void ServerImplementation::ClearAppendEntriesMap() 
+void RaftServer::ClearAppendEntriesMap() 
 {
     _appendEntriesResponseMap.clear();
 }
 
 /* Candidate starts a new election */
-void ServerImplementation::runForElection() 
+void RaftServer::runForElection() 
 {
     int initialTerm = g_stateHelper.GetCurrentTerm();
     g_stateHelper.AddCurrentTerm(g_stateHelper.GetCurrentTerm() + 1);
@@ -358,7 +340,7 @@ void ServerImplementation::runForElection()
     // TODO: Use _nodeList instead
     for (int i = 0; i < _hostList.size(); i++) {
         if (_hostList[i] != GetMyIp()) {
-            std::thread(&ServerImplementation::invokeRequestVote, this, _hostList[i]).detach();
+            thread(&RaftServer::invokeRequestVote, this, _hostList[i]).detach();
         }
     }
 
@@ -372,7 +354,7 @@ void ServerImplementation::runForElection()
     }
 }
         
-void ServerImplementation::invokeRequestVote(string host) {
+void RaftServer::invokeRequestVote(string host) {
 
     cout<<"[INFO]: Sending Request Vote to "<<host;
     // TODO : Use nodeList instead
@@ -387,7 +369,7 @@ void ServerImplementation::invokeRequestVote(string host) {
     }
 }
 
-AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (string followerip, int nextIndex) 
+AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string followerip, int nextIndex) 
 {
     dbgprintf("[DEBUG] %s: Entering function with nextIndex = %d\n", __func__, nextIndex);
     AppendEntriesRequest request;
@@ -421,7 +403,7 @@ AppendEntriesRequest ServerImplementation::prepareRequestForAppendEntries (strin
     return request;
 }
         
-void ServerImplementation::invokeAppendEntries(string followerIp) 
+void RaftServer::invokeAppendEntries(string followerIp) 
 {
     dbgprintf("[DEBUG] %s: Entering function with followerIp = %s\n", __func__, followerIp.c_str());
     
@@ -486,7 +468,7 @@ void ServerImplementation::invokeAppendEntries(string followerIp)
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
-bool ServerImplementation::requestVote(Raft::Stub* stub) {
+bool RaftServer::requestVote(Raft::Stub* stub) {
     ReqVoteRequest req;
 
     req.set_term(g_stateHelper.GetCurrentTerm());
@@ -510,7 +492,7 @@ bool ServerImplementation::requestVote(Raft::Stub* stub) {
 }
 
 // Node calls this function after it becomes a leader  
-void ServerImplementation::BroadcastAppendEntries() 
+void RaftServer::BroadcastAppendEntries() 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     dbgprintf("[DEBUG] %s: _nodeList.size() = %ld\n", __func__, g_nodeList.size());
@@ -520,7 +502,7 @@ void ServerImplementation::BroadcastAppendEntries()
         if (node.first != _myIp) 
         {
             dbgprintf("[DEBUG]: going to call invokeAppendEntries\n");
-            thread(&ServerImplementation::invokeAppendEntries, this, node.first).detach();
+            thread(&RaftServer::invokeAppendEntries, this, node.first).detach();
         }
     }
     
@@ -533,7 +515,7 @@ void ServerImplementation::BroadcastAppendEntries()
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
         
-void ServerImplementation::becomeLeader() 
+void RaftServer::becomeLeader() 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
 
@@ -543,15 +525,15 @@ void ServerImplementation::becomeLeader()
     setMatchIndexToLeaderLastIndex();
 
     // inform LB
-    lBNodeCommClient.InvokeAssertLeadership();
+    lBNodeCommClient->InvokeAssertLeadership();
 
     // to maintain leadership
-    thread(&ServerImplementation::invokePeriodicAppendEntries, this).detach();
+    thread(&RaftServer::invokePeriodicAppendEntries, this).detach();
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
-void ServerImplementation::invokePeriodicAppendEntries()
+void RaftServer::invokePeriodicAppendEntries()
 {
     while (1)
     {
@@ -561,7 +543,7 @@ void ServerImplementation::invokePeriodicAppendEntries()
     }
 }
 
-void ServerImplementation::setNextIndexToLeaderLastIndex() 
+void RaftServer::setNextIndexToLeaderLastIndex() 
 {
     int leaderLastIndex = g_stateHelper.GetLogLength();
 
@@ -571,7 +553,7 @@ void ServerImplementation::setNextIndexToLeaderLastIndex()
     }
 }
 
-void ServerImplementation::setMatchIndexToLeaderLastIndex() 
+void RaftServer::setMatchIndexToLeaderLastIndex() 
 {
     int leaderLastIndex = g_stateHelper.GetLogLength();
     
@@ -581,7 +563,7 @@ void ServerImplementation::setMatchIndexToLeaderLastIndex()
     }
 }
 
-void ServerImplementation::becomeFollower() 
+void RaftServer::becomeFollower() 
 {
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
 }
@@ -589,7 +571,7 @@ void ServerImplementation::becomeFollower()
 /* 
     Invoked when timeout signal is received - 
 */
-void ServerImplementation::becomeCandidate() {
+void RaftServer::becomeCandidate() {
     g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
     dbgprintf("INFO] Become Candidate\n");
     resetElectionTimeout();
@@ -597,7 +579,7 @@ void ServerImplementation::becomeCandidate() {
     runForElection();
 }
 
-void ServerImplementation::AlarmCallback() {
+void RaftServer::AlarmCallback() {
   if (g_stateHelper.GetIdentity() == ServerIdentity::LEADER) {
     //ReplicateEntries();
   } else {
@@ -605,12 +587,12 @@ void ServerImplementation::AlarmCallback() {
   }
 }
 
-void ServerImplementation::resetElectionTimeout() {
+void RaftServer::resetElectionTimeout() {
     _electionTimeout = _minElectionTimeout + (rand() % 
         (_maxElectionTimeout - _minElectionTimeout + 1));
 }
 
-void ServerImplementation::setAlarm(int after_ms) {
+void RaftServer::setAlarm(int after_ms) {
     if (g_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER) {
         // TODO:
     }
@@ -630,7 +612,7 @@ void ServerImplementation::setAlarm(int after_ms) {
     return;
 }
 
-Status ServerImplementation::AppendEntries(ServerContext* context, 
+Status RaftServer::AppendEntries(ServerContext* context, 
                                             const AppendEntriesRequest* request, 
                                             AppendEntriesReply *reply)
 {
@@ -702,7 +684,7 @@ Status ServerImplementation::AppendEntries(ServerContext* context,
 }
 
 
-void ServerImplementation::ExecuteCommands(int start, int end) 
+void RaftServer::ExecuteCommands(int start, int end) 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for(int i = start; i <= end; i++)
@@ -714,7 +696,7 @@ void ServerImplementation::ExecuteCommands(int start, int end)
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
-Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
+Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
 {
     cout<<"Received reqvote from "<<request->candidateid()<<" --- "<<request->term()<<endl;
 
@@ -772,15 +754,22 @@ void RunServer(string my_ip) {
     server->Wait();
 }
 
-// @usage: ./server <ip with port>
-int main(int argc, char **argv) {
+/*
+*   @usage: ./server <my ip with port>  <lb ip with port>
+*/
+int main(int argc, char **argv) 
+{
+    // init
+    g_stateHelper.SetIdentity(FOLLOWER);
+    serverImpl.SetMyIp(argv[1]);
+
     pthread_t kv_server_t;
     pthread_t hb_t;
     
     pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
-    pthread_create(&hb_t, NULL, StartHB, argv[1]);
-
-    vector<string> hostList;
+    pthread_create(&hb_t, NULL, StartHB, argv[2]);
+    
+    // vector<string> hostList; // QUESTION: Is this needed?
     RunServer(argv[1]);
 
     pthread_join(hb_t, NULL);

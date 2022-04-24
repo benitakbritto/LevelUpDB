@@ -35,7 +35,7 @@ using kvstore::AssertLeadershipRequest;
 using kvstore::AssertLeadershipReply;
 using kvstore::HeartBeatReply;
 
-class ServerImplementation final : public Raft::Service {
+class RaftServer final : public Raft::Service {
 private: 
   unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
   MutexMap _lockHelper;

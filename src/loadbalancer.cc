@@ -55,6 +55,7 @@ private:
         return it->second.second;
     }
 
+    // TODO: Reads should go to leader for strong consistency
     /*
     *   @brief receive client request from client
     *                 and replay to server node(s)
@@ -180,6 +181,7 @@ private:
 public:
     LBNodeCommService() {}
 
+    // TODO: Update server's identity
     /*
     *   @brief Receives heartbeat from a server node, 
     *          registers node if LB hasn't seen the node before
