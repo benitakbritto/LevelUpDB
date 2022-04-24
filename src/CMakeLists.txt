@@ -11,38 +11,19 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/common/common.cmake)
 # Proto files
 
 # Proto file 1
-get_filename_component(comm_proto "../src/protos/servercomm.proto" ABSOLUTE)
-get_filename_component(comm_proto_path "${comm_proto}" PATH)
-
-# Proto file 2
 get_filename_component(lb_proto "../src/protos/lb.proto" ABSOLUTE)
 get_filename_component(lb_proto_path "${lb_proto}" PATH)
 
-# Proto file 3
+# Proto file 2
 get_filename_component(raft_proto "../src/protos/raft.proto" ABSOLUTE)
 get_filename_component(raft_proto_path "${raft_proto}" PATH)
 
-# Proto file 4
+# Proto file 3
 get_filename_component(keyvalueops_proto "../src/protos/keyvalueops.proto" ABSOLUTE)
 get_filename_component(keyvalueops_proto_path "${keyvalueops_proto}" PATH)
 
 # Generated sources
 # Proto file 1
-set(comm_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/servercomm.pb.cc")
-set(comm_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/servercomm.pb.h")
-set(comm_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/servercomm.grpc.pb.cc")
-set(comm_grpc_hdrs "${CMAKE_CURRENT_BINARY_DIR}/servercomm.grpc.pb.h")
-add_custom_command(
-      OUTPUT "${comm_proto_srcs}" "${comm_proto_hdrs}" "${comm_grpc_srcs}" "${comm_grpc_hdrs}"
-      COMMAND ${_PROTOBUF_PROTOC}
-      ARGS --grpc_out "${CMAKE_CURRENT_BINARY_DIR}"
-        --cpp_out "${CMAKE_CURRENT_BINARY_DIR}"
-        -I "${comm_proto_path}"
-        --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
-        "${comm_proto}"
-      DEPENDS "${comm_proto}")
-
-# Proto file 2
 set(lb_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/lb.pb.cc")
 set(lb_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/lb.pb.h")
 set(lb_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/lb.grpc.pb.cc")
@@ -57,7 +38,7 @@ add_custom_command(
         "${lb_proto}"
       DEPENDS "${lb_proto}")
 
-# Proto file 3
+# Proto file 2
 set(raft_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/raft.pb.cc")
 set(raft_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/raft.pb.h")
 set(raft_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/raft.grpc.pb.cc")
@@ -72,7 +53,7 @@ add_custom_command(
         "${raft_proto}"
       DEPENDS "${raft_proto}")
 
-# Proto file 4
+# Proto file 3
 set(keyvalueops_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.pb.cc")
 set(keyvalueops_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.pb.h")
 set(keyvalueops_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/keyvalueops.grpc.pb.cc")
@@ -93,19 +74,7 @@ add_custom_command(
 # TODO: Remove
 include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${LEVELDB_INCLUDE_DIR}") 
 
-
 # Proto file 1
-add_library(comm_grpc_proto
-  ${comm_grpc_srcs}
-  ${comm_grpc_hdrs}
-  ${comm_proto_srcs}
-  ${comm_proto_hdrs})
-target_link_libraries(comm_grpc_proto
-  ${_REFLECTION}
-  ${_GRPC_GRPCPP}
-  ${_PROTOBUF_LIBPROTOBUF})
-
-# Proto file 2
 add_library(lb_grpc_proto
   ${lb_grpc_srcs}
   ${lb_grpc_hdrs}
@@ -116,7 +85,7 @@ target_link_libraries(lb_grpc_proto
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
-# Proto file 3
+# Proto file 2
 add_library(raft_grpc_proto
   ${raft_grpc_srcs}
   ${raft_grpc_hdrs}
@@ -127,7 +96,7 @@ target_link_libraries(raft_grpc_proto
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
-# Proto file 4
+# Proto file 3
 add_library(keyvalueops_grpc_proto
   ${keyvalueops_grpc_srcs}
   ${keyvalueops_grpc_hdrs}
@@ -185,7 +154,6 @@ foreach(_target
     locks
     state_helper
     keyvalueops_grpc_proto
-    comm_grpc_proto
     lb_grpc_proto
     raft_grpc_proto
     ${LEVELDB_LIBRARY}
