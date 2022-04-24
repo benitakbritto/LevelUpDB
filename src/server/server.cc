@@ -79,6 +79,7 @@ void PrintNodesInNodeList()
  * DECLARATION: KeyValueOpsServiceImpl
  *****************************************************************************/
 // TODO: use leveldb
+
 Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply)  
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -129,6 +130,12 @@ void *RunKeyValueServer(void* args)
 /******************************************************************************
  * DECLARATION: LBNodeCommClient
  *****************************************************************************/
+
+/*
+*   @brief Updates the global nodeList with the sys state received from the LB
+* 
+*   @param AssertLeadershipReply    
+*/
 void LBNodeCommClient::updateFollowersInNodeList(AssertLeadershipReply *reply)
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -153,12 +160,19 @@ void LBNodeCommClient::updateFollowersInNodeList(AssertLeadershipReply *reply)
     }
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
-  
+
+/*
+*   @brief Created a stub to communicate with the LB
+*/
 LBNodeCommClient::LBNodeCommClient(string _lb_addr) 
 {
     stub_ = LBNodeComm::NewStub(grpc::CreateChannel(_lb_addr, grpc::InsecureChannelCredentials()));
 }
 
+/*
+*   @brief Sends periodic heartbeats to the LB,
+*          updates the nodeList with the sys state received from the LB
+*/
 void LBNodeCommClient::SendHeartBeat() 
 {
     ClientContext context;
@@ -179,7 +193,6 @@ void LBNodeCommClient::SendHeartBeat()
         stream->Read(&reply);
         dbgprintf("[INFO] SendHeartBeat: recv heartbeat response\n");
                 
-        // TODO : Parse reply to get sys state - is this done?
         serverImpl.BuildSystemStateFromHBReply(reply);
 
         dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
@@ -187,6 +200,10 @@ void LBNodeCommClient::SendHeartBeat()
     }
 }
 
+/*
+*   @brief Informs the LB of its identity as the new leader for current term
+*          updates the nodeList with the sys state received from the LB
+*/
 void LBNodeCommClient::InvokeAssertLeadership()
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -214,6 +231,11 @@ void LBNodeCommClient::InvokeAssertLeadership()
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
+/*
+*   @brief Creates a new client to communicate with LB and sends heartbeats
+*
+*   @param args to be used as lb address 
+*/
 void *StartHB(void* args) 
 {
     string lb_addr = string((char *) args);
@@ -227,20 +249,43 @@ void *StartHB(void* args)
 /******************************************************************************
  * DECLARATION: Raft
  *****************************************************************************/
+
+/*
+*   @brief Sets self IP
+*
+*   @param ip
+*/
 void RaftServer::SetMyIp(string ip)
 {
     _myIp = ip;
 }
 
+/*
+*   @brief Gets self IP
+*
+*   @return ip
+*/
 string RaftServer::GetMyIp()
 {
     return _myIp;
 }
 
+/*
+*   @brief triggers AlarmCallBack 
+*
+*   @param signum
+*/
 void signalHandler(int signum) {
     signalHandlerService->AlarmCallback();
 	return;
 }
+
+/*
+*   @brief initializes the Raft Server,
+*          updates global state with currentTerm, commitIndex, lastAppliedIndex,
+*          resets election timeout with a random time duration,
+*          prepares to trigger alarm at the end of election timeout
+*/
 
 // TODO: Fix param - is it fixed?
 void RaftServer::ServerInit() 
@@ -277,6 +322,11 @@ void RaftServer::ServerInit()
     dbgprintf("[DEBUG]: %s: Exiting function\n", __func__);
 }
 
+/*
+*   @brief builds cluster state based on HB reply from LB
+*          
+*   @param reply
+*/
 void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply) 
 {
     dbgprintf("[DEBUG] node size: %d \n", reply.node_data_size());
@@ -288,12 +338,24 @@ void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply)
     }
 }
 
+/*
+*   @brief calculates the number of responses needed for majority
+*          
+*   @return majority count
+*/
 int RaftServer::GetMajorityCount()
 {
     int size = g_nodeList.size();
     return (size % 2 == 0) ? (size / 2) : (size / 2) + 1;
 }
 
+/*
+*   @brief checks if majority responses have been received
+*          
+*   @return 
+*       true : on receiving majority or if there is only one node in the cluster
+*       false: otherwise
+*/
 bool RaftServer::ReceivedMajority() 
 {
     // Leader is the only node alive
@@ -318,12 +380,20 @@ bool RaftServer::ReceivedMajority()
     return false;
 }
 
+/*
+*   @brief clears AppendEntriesMap          
+*/
 void RaftServer::ClearAppendEntriesMap() 
 {
     _appendEntriesResponseMap.clear();
 }
 
-/* Candidate starts a new election */
+/*
+*   @brief  candidate starts a new election,
+*           resets election timeout,
+*           calls invokeRequestVote() parallely for each node in the cluster,
+*           becomes leader on getting majority
+*/
 void RaftServer::runForElection() 
 {
     int initialTerm = g_stateHelper.GetCurrentTerm();
@@ -352,21 +422,31 @@ void RaftServer::runForElection()
         becomeLeader();
     }
 }
-        
-void RaftServer::invokeRequestVote(string host) {
 
-    cout<<"[INFO]: Sending Request Vote to "<<host<<endl;
-    if(g_nodeList[host].second.get()==nullptr)
+/*
+*   @brief  sends RequestVote RPC to a node
+*
+*   @param nodeIp
+*/       
+void RaftServer::invokeRequestVote(string nodeIp) {
+
+    cout<<"[INFO]: Sending Request Vote to "<<nodeIp<<endl;
+    if(g_nodeList[nodeIp].second.get()==nullptr)
     {
-       g_nodeList[host].second = Raft::NewStub(grpc::CreateChannel(host, grpc::InsecureChannelCredentials()));
+       g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(nodeIp, grpc::InsecureChannelCredentials()));
     }
 
-    if(requestVote(g_nodeList[host].second.get()))
+    if(requestVote(g_nodeList[nodeIp].second.get()))
     {
         _votesGained++;
     }
 }
 
+/*
+*   @brief  builds request for AppendEntries RPC
+*
+*   @param followerip, nextIndex
+*/  
 AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string followerip, int nextIndex) 
 {
     dbgprintf("[DEBUG] %s: Entering function with nextIndex = %d\n", __func__, nextIndex);
@@ -400,7 +480,14 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
     return request;
 }
-        
+
+/*
+*   @brief  send AppendEntries RPC to follower,
+*           retry in case of log inconsistencies,
+*           become follower if reply contains a greater term
+*
+*   @param followerip
+*/         
 void RaftServer::invokeAppendEntries(string followerIp) 
 {
     dbgprintf("[DEBUG] %s: Entering function with followerIp = %s\n", __func__, followerIp.c_str());
@@ -466,6 +553,11 @@ void RaftServer::invokeAppendEntries(string followerIp)
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
+/*
+*   @brief  send requestVote RPC to follower node stub
+*           
+*   @param stub
+*/ 
 bool RaftServer::requestVote(Raft::Stub* stub) {
     ReqVoteRequest req;
 
@@ -491,11 +583,14 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
     {
         g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
     }
-    
     return false;
 }
 
-// Node calls this function after it becomes a leader  
+
+/*
+*   @brief  Leader broadcasts  by creating threads for each node,
+*           stops if it learns it is no longer the leader
+*/ 
 void RaftServer::BroadcastAppendEntries() 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -518,7 +613,13 @@ void RaftServer::BroadcastAppendEntries()
     }
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
-        
+
+/*
+*   @brief  Leader sets its identity as leader,
+*           matchIndex and nextIndex to its last index,
+*           invokes AssertLeadership RPC to inform LB of its leadership,
+*           spawns a thead to periodically call AppendEntries RPC,
+*/       
 void RaftServer::becomeLeader() 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -537,6 +638,9 @@ void RaftServer::becomeLeader()
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
+/*
+*   @brief  BroadCast AppendEntries periodically
+*/ 
 void RaftServer::invokePeriodicAppendEntries()
 {
     while (1)
@@ -547,6 +651,9 @@ void RaftServer::invokePeriodicAppendEntries()
     }
 }
 
+/*
+*   @brief sets nextIndex to last index on leader's log
+*/ 
 void RaftServer::setNextIndexToLeaderLastIndex() 
 {
     int leaderLastIndex = g_stateHelper.GetLogLength();
@@ -557,6 +664,9 @@ void RaftServer::setNextIndexToLeaderLastIndex()
     }
 }
 
+/*
+*   @brief   sets matchIndex to last index on leader's log
+*/ 
 void RaftServer::setMatchIndexToLeaderLastIndex() 
 {
     int leaderLastIndex = g_stateHelper.GetLogLength();
@@ -567,13 +677,18 @@ void RaftServer::setMatchIndexToLeaderLastIndex()
     }
 }
 
+/*
+*   @brief   sets identity of node to follower
+*/
 void RaftServer::becomeFollower() 
 {
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
 }
         
 /* 
-    Invoked when timeout signal is received - 
+*    @brief     set identity as candidate, 
+*               resets election timeout,
+*               runs for election on timeout 
 */
 void RaftServer::becomeCandidate() {
     g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
@@ -583,6 +698,9 @@ void RaftServer::becomeCandidate() {
     runForElection();
 }
 
+/* 
+*    @brief     
+*/
 void RaftServer::AlarmCallback() {
   if (g_stateHelper.GetIdentity() == ServerIdentity::LEADER) {
     //ReplicateEntries();
@@ -591,11 +709,17 @@ void RaftServer::AlarmCallback() {
   }
 }
 
+/* 
+*    @brief   sets election timeout to a random duration   
+*/
 void RaftServer::resetElectionTimeout() {
     _electionTimeout = _minElectionTimeout + (rand() % 
         (_maxElectionTimeout - _minElectionTimeout + 1));
 }
 
+/* 
+*    @brief   
+*/
 void RaftServer::setAlarm(int after_ms) {
     if (g_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER) {
         // TODO:
@@ -616,6 +740,19 @@ void RaftServer::setAlarm(int after_ms) {
     return;
 }
 
+/* 
+*    @brief   On receiving AppendEntries RPC,   
+*                   Case 1: Leader term < my term, reject the RPC
+*                   Case 2: Candidate receives valid AppendEntries RPC
+*                               a: in case of mismatch in term at log index , reject
+*                               b. otherwise, apply entries to log and execute commands
+*
+*   @param context 
+*   @param request 
+*   @param response 
+*
+*   @return grpc Status
+*/
 Status RaftServer::AppendEntries(ServerContext* context, 
                                             const AppendEntriesRequest* request, 
                                             AppendEntriesReply *reply)
@@ -687,7 +824,14 @@ Status RaftServer::AppendEntries(ServerContext* context,
     return Status::OK;
 }
 
-
+/* 
+*    @brief   Execute commands from start index to end index,
+                set lastAppliedIndex iteratively
+*
+*   @param start 
+*   @param end 
+*
+*/
 void RaftServer::ExecuteCommands(int start, int end) 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -700,6 +844,19 @@ void RaftServer::ExecuteCommands(int start, int end)
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
+/* 
+*   @brief   On receiving ReqVote RPC, 
+*               Case 1: if req term < current term
+*               Case 2: if req term > current term
+                Case 3: if no votes have been made for this term, or voted for this leader before
+*
+*   @param context 
+*   @param request 
+*   @param response 
+*
+*   @return grpc Status
+*
+*/
 Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
 {
     cout<<"Received reqvote from "<<request->candidateid()<<" --- "<<request->term()<<endl;
@@ -707,17 +864,20 @@ Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request
     reply->set_votegrantedfor(false);
     reply->set_term(g_stateHelper.GetCurrentTerm());
 
+    // Case 1
     if(request->term() < g_stateHelper.GetCurrentTerm())
     {
         return grpc::Status::OK;
     }
 
+    // Case 2
     if(request->term() > g_stateHelper.GetCurrentTerm())
     {
         g_stateHelper.AddCurrentTerm(request->term());
-        g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+        becomeFollower();
     }
 
+    // Case 3
     if(g_stateHelper.GetVotedFor(request->term())=="" || g_stateHelper.GetVotedFor(request->term()) == request->candidateid())
     {
         if(request->lastlogterm() > g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength() - 1))
