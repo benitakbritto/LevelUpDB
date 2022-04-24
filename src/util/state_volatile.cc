@@ -81,7 +81,7 @@ int VolatileState::GetNextIndex(string serverId)
 {
     if (_nextIndex.count(serverId) == 0)
     {
-        throw runtime_error("[ERROR]: Invalid index");
+        throw runtime_error("[ERROR]: Invalid index for "+serverId);
     }
 
     return _nextIndex[serverId];
