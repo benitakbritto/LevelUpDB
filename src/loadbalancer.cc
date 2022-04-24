@@ -218,7 +218,7 @@ public:
 */
 void* RunServerForClient(void* arg) 
 {
-    string server_address("0.0.0.0:50051"); // TODO: set from cli
+    string server_address((char *) arg); 
     KeyValueService service;
 
     grpc::EnableDefaultHealthCheckService(true);
@@ -239,7 +239,7 @@ void* RunServerForClient(void* arg)
 */
 void* RunServerForNodes(void* arg) 
 {
-    string server_address("0.0.0.0:50052");
+    string server_address((char *) arg);
     LBNodeCommService service;
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
@@ -260,8 +260,8 @@ void* RunServerForNodes(void* arg)
 int main (int argc, char *argv[]){
     pthread_t client_server_t, node_server_t;
   
-    pthread_create(&client_server_t, NULL, RunServerForClient, NULL);
-    pthread_create(&node_server_t, NULL, RunServerForNodes, NULL);
+    pthread_create(&client_server_t, NULL, RunServerForClient, argv[1]);
+    pthread_create(&node_server_t, NULL, RunServerForNodes, argv[2]);
 
     pthread_join(client_server_t, NULL);
     pthread_join(node_server_t, NULL);

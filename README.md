@@ -31,7 +31,7 @@ Clone and follow the commands mentioned [here](https://github.com/google/snappy)
 
 ### Run
 ```
-./loadbalancer
+./loadbalancer <ip with port for client to connect> <ip with port for servers to send heartbeat>
 ./server <ip with port>
 ./keyvalue_client
 ```
