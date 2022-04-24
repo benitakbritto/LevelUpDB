@@ -102,7 +102,7 @@ int VolatileReplicatedLog::GetTerm(int index)
 bool VolatileReplicatedLog::isValidIndex(int index)
 {
     int len = GetLength();
-    if (len <= index)
+    if (index < 0 || len <= index)
     {
         // throw runtime_error("[ERROR]: Invalid index");
         return false;
