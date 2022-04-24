@@ -774,18 +774,17 @@ void RunServer(string my_ip) {
 
 // @usage: ./server <ip with port>
 int main(int argc, char **argv) {
-    // TODO: Uncomment later
-    // pthread_t kv_server_t;
-    // pthread_t hb_t;
+    pthread_t kv_server_t;
+    pthread_t hb_t;
     
-    // pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
-    // pthread_create(&hb_t, NULL, StartHB, argv[1]);
+    pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
+    pthread_create(&hb_t, NULL, StartHB, argv[1]);
 
-    // vector<string> hostList;
-    // RunServer(argv[1]);
+    vector<string> hostList;
+    RunServer(argv[1]);
 
-    // pthread_join(hb_t, NULL);
-    // pthread_join(kv_server_t, NULL);
+    pthread_join(hb_t, NULL);
+    pthread_join(kv_server_t, NULL);
 
     return 0;
 }
