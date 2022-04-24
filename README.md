@@ -10,11 +10,18 @@ Follow these steps to install gRPC lib using cmake: https://grpc.io/docs/languag
 
 for example, instead of `make -j` use `make -j 4`
 
- ### LevelDB Installation
-Follow the commands mentioned [here](https://github.com/google/leveldb#getting-the-source) and [here](https://github.com/google/leveldb#building) 
+### LevelDB Installation
+Clone and follow the commands mentioned [here](https://github.com/google/leveldb#getting-the-source) and [here](https://github.com/google/leveldb#building) 
   
- ### Snappy Installation
- TODO
+### Snappy Installation
+Clone and follow the commands mentioned [here](https://github.com/google/snappy).
+ 
+### Folder structure
+ |_src
+  |_third_party
+    |_leveldb
+    |_snappy
+ |_storage
   
 ### Build
 #### Main source code
