@@ -40,16 +40,16 @@ private:
   unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
   MutexMap _lockHelper;
   string _myIp;
-  std::map<string,std::unique_ptr<Raft::Stub>> _stubs; // TODO: use nodes
-  const std::vector<std::string> _hostList; // TODO: use nodes
+  // std::map<string,std::unique_ptr<Raft::Stub>> _stubs; // TODO: use nodes
+  // const std::vector<std::string> _hostList; // TODO: use nodes
 
   // LevelDBWrapper _levelDBWrapper;
   int _hostCount;
   atomic<int> _votesGained;
   int _electionTimeout;
 
-  int _minElectionTimeout = 800;
-  int _maxElectionTimeout = 1600;
+  int _minElectionTimeout = 8000;
+  int _maxElectionTimeout = 16000;
   int _heartbeatInterval = 50;
 
   void setAlarm(int after_us);
