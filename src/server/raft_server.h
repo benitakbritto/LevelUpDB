@@ -69,9 +69,6 @@ private:
   void setNextIndexToLeaderLastIndex();
   void setMatchIndexToLeaderLastIndex();
 
-  vector<string> dummyGetHostList(); // TODO: Replace with getHostList
-  void dummySetHostList();
-
   AppendEntriesRequest prepareRequestForAppendEntries(string followerip, int nextIndex);
 
   int GetMajorityCount();
