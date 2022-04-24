@@ -337,33 +337,30 @@ void RaftServer::runForElection()
     setAlarm(_electionTimeout);
 
     /* Send RequestVote RPCs to all servers */
-    // TODO: Use _nodeList instead
-    for (int i = 0; i < _hostList.size(); i++) {
-        if (_hostList[i] != GetMyIp()) {
-            thread(&RaftServer::invokeRequestVote, this, _hostList[i]).detach();
+    for (auto& node: g_nodeList) {
+        if (node.first !=GetMyIp()) {
+            std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
         }
     }
-
+    
     sleep(2);
     //cout<<"Woken up: " <<_votesGained<<endl;
-    // TODO: Use _nodeList instead
-    if (_votesGained > _hostList.size()/2 && g_stateHelper.GetIdentity() == ServerIdentity::CANDIDATE) {
+    if (_votesGained > g_nodeList.size()/2 && g_stateHelper.GetIdentity() == ServerIdentity::CANDIDATE) {
         cout<<"[INFO] Candidate received majority of "<<_votesGained<<endl;
-        cout<<"[INFO] Change Role to LEADER for term"<<g_stateHelper.GetCurrentTerm()<<endl;
+        cout<<"[INFO] Change Role to LEADER for term "<<g_stateHelper.GetCurrentTerm()<<endl;
         becomeLeader();
     }
 }
         
 void RaftServer::invokeRequestVote(string host) {
 
-    cout<<"[INFO]: Sending Request Vote to "<<host;
-    // TODO : Use nodeList instead
-    if(_stubs[host].get()==nullptr)
+    cout<<"[INFO]: Sending Request Vote to "<<host<<endl;
+    if(g_nodeList[host].second.get()==nullptr)
     {
-        _stubs[host] = Raft::NewStub(grpc::CreateChannel(host, grpc::InsecureChannelCredentials()));
+       g_nodeList[host].second = Raft::NewStub(grpc::CreateChannel(host, grpc::InsecureChannelCredentials()));
     }
 
-    if(requestVote(_stubs[host].get()))
+    if(requestVote(g_nodeList[host].second.get()))
     {
         _votesGained++;
     }
@@ -474,7 +471,8 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
     req.set_term(g_stateHelper.GetCurrentTerm());
     req.set_candidateid(_myIp);
     req.set_lastlogindex(g_stateHelper.GetLogLength());
-    req.set_lastlogterm(g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength() - 1));
+    cout<< g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1);
+    req.set_lastlogterm(g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1));
 
     ReqVoteReply reply;
     ClientContext context;
@@ -487,6 +485,11 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 
     if(status.ok() && reply.votegrantedfor())
         return true;
+    
+    if(status.ok() && reply.term()>g_stateHelper.GetCurrentTerm())
+    {
+        g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    }
     
     return false;
 }
@@ -632,7 +635,7 @@ Status RaftServer::AppendEntries(ServerContext* context,
     // Case 2: Candidate receives valid AppendEntries RPC
     else 
     {
-        if (ServerIdentity::CANDIDATE)
+        if (g_stateHelper.GetIdentity() == ServerIdentity::CANDIDATE)
         {
             dbgprintf("[DEBUG]: AppendEntries RPC - Candidate received a valid AppendEntriesRPC, becoming follower\n");
             becomeFollower();
@@ -735,7 +738,7 @@ Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request
         }
     }
 
-    return grpc::Status::CANCELLED;
+    return grpc::Status::OK;
 }
 
 void RunServer(string my_ip) {
@@ -769,7 +772,6 @@ int main(int argc, char **argv)
     pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
     pthread_create(&hb_t, NULL, StartHB, argv[2]);
     
-    // vector<string> hostList; // QUESTION: Is this needed?
     RunServer(argv[1]);
 
     pthread_join(hb_t, NULL);
