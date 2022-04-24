@@ -33,119 +33,192 @@ string leaderIP;
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
-class KeyValueService final : public KeyValueOps::Service {
-    private:
-        // for round-robin
-        int idx = 0;
+/*
+*   @brief Replays client requests to the server node(s)
+*/
+class KeyValueService final : public KeyValueOps::Service 
+{
+private:
+    int idx = 0; // for round-robin
 
-        KeyValueClient* getServerIPToRouteTo(){
-            idx = (++idx) % (nodes.size());
-            dbgprintf("[INFO]: current idx is: %d\n", idx);
-            auto it = nodes.begin();
-            advance(it, idx);
-            return it->second.second;
-        }
+    /*
+    *   @brief Gets server ip using round robin
+    *
+    *   @return Server stub
+    */
+    KeyValueClient* getServerIPToRouteTo()
+    {
+        idx = (++idx) % (nodes.size());
+        auto it = nodes.begin();
+        advance(it, idx);
+        dbgprintf("[DEBUG] %s: Routing to %s\n", __func__, (it->first).c_str());
+        return it->second.second;
+    }
 
-        Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override {
-            KeyValueClient* stub = getServerIPToRouteTo();
-            return stub->GetFromDB(*request, reply);
-        }
+    /*
+    *   @brief receive client request from client
+    *                 and replay to server node(s)
+    *
+    *   @param context 
+    *   @param request 
+    *   @param response 
+    *   @param offset 
+    *   @return gRPC status
+    */
+    Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override 
+    {
+        dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+        KeyValueClient* stub = getServerIPToRouteTo();
+        return stub->GetFromDB(*request, reply);
+    }
 
-        Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override {
-            dbgprintf("Reached LB Put \n");
-            KeyValueClient* stub = nodes[leaderIP].second;
-            dbgprintf("%d %s \n", stub == NULL, leaderIP.c_str());
-            return stub->PutToDB(*request, reply);
-        } 
+    Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override 
+    {
+        dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+        dbgprintf("LeaderIP = %s\n", leaderIP.c_str());
+        
+        KeyValueClient* stub = nodes[leaderIP].second;
+        
+        return stub->PutToDB(*request, reply);
+    } 
 
-    public:
-        KeyValueService(){}
-
+public:
+    KeyValueService(){}
 };
 
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
-class LBNodeCommService final: public LBNodeComm::Service {
-    
-    private:
+/*
+*   @brief Communication between the LB and the server nodes (via heartbeats)
+*/
+class LBNodeCommService final: public LBNodeComm::Service 
+{
+private:
 
-        void registerNode(int identity, string ip) {
-            nodes[ip] = make_pair(identity,
-                            new KeyValueClient (grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
-            dbgprintf("[DEBUG]: Length of nodes at LB: %ld", nodes.size());
+    /*
+    *   @brief Save server node information
+    *
+    *   @param identity  
+    *   @param ip 
+    */
+    void registerNode(int identity, string ip) 
+    {
+        nodes[ip] = make_pair(identity,
+                    new KeyValueClient (grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
+        
+        dbgprintf("[DEBUG]: Length of nodes at LB: %ld", nodes.size());
+    }
+
+    /*
+    *   @brief Remove node information from in-mem
+    *
+    *   @param ip 
+    */
+    void eraseNode(string ip) 
+    {
+        nodes.erase(ip);
+        dbgprintf("[DEBUG] %s: Removed ip %s, Length of nodes at LB: %ld\n", __func__, ip.c_str(), nodes.size());
+    }
+
+    /*
+    *   @brief Change identity of ip to Leader
+    *
+    *   @param ip 
+    */
+    void updateLeader(string ip) 
+    {
+        if(!leaderIP.empty()) 
+        {
+            nodes[leaderIP].first = FOLLOWER;
         }
+        leaderIP = ip;
+        nodes[leaderIP].first = LEADER;
+    }
 
-        void eraseNode(string ip) {
-            nodes.erase(ip);
-            dbgprintf("[DEBUG]: Removed ip %s, Length of nodes at LB: %ld\n", ip.c_str(), nodes.size());
+    /*
+    *   @brief Helper function
+    *
+    *   @param reply 
+    */
+    void addNodeDataToReply(HeartBeatReply* reply) 
+    {
+        NodeData* nodeData;
+        for (auto& it: nodes) 
+        {
+            nodeData = reply->add_node_data();
+            nodeData->set_ip(it.first);
+            nodeData->set_identity(it.second.first);
         }
+    }
 
-        void updateLeader(string ip) {
-            if(!leaderIP.empty()) {
-                nodes[leaderIP].first = FOLLOWER;
-            }
-            leaderIP = ip;
-            nodes[leaderIP].first = LEADER;
-        }
+public:
+    LBNodeCommService() {}
 
-        void addNodeDataToReply(HeartBeatReply* reply) {
-            NodeData* nodeData;
-            for (auto& it: nodes) 
+    /*
+    *   @brief Receives heartbeat from a server node, 
+    *          registers node if LB hasn't seen the node before
+    *          and sends back a list of all the alive server nodes in the reply
+    *
+    *   @param context
+    *   @param stream 
+    */
+    Status SendHeartBeat(ServerContext* context, ServerReaderWriter<HeartBeatReply, HeartBeatRequest>* stream) override 
+    {
+        HeartBeatRequest request;
+        HeartBeatReply reply;
+
+        int identity;
+        string ip;
+        bool registerFirstTime = true;
+
+        while(1) 
+        {
+            if(!stream->Read(&request)) 
             {
-                nodeData = reply->add_node_data();
-                nodeData->set_ip(it.first);
-                nodeData->set_identity(it.second.first);
+                break;
             }
-        }
+            dbgprintf("[INFO] %s: recv heartbeat from IP:[%s]\n", __func__, request.ip().c_str());
 
-    public:
-        LBNodeCommService() {}
+            identity = request.identity();
+            ip = request.ip();
 
-        Status SendHeartBeat(ServerContext* context, ServerReaderWriter<HeartBeatReply, HeartBeatRequest>* stream) override {
-            HeartBeatRequest request;
-            HeartBeatReply reply;
-
-            int identity;
-            string ip;
-            bool registerFirstTime = true;
-
-            while(1) {
-                if(!stream->Read(&request)) {
-                    break;
-                }
-                dbgprintf("[INFO]: recv heartbeat from IP:[%s]\n", request.ip().c_str());
-
-                identity = request.identity();
-                ip = request.ip();
-
-                if(registerFirstTime) {
-                    dbgprintf("[DEBUG]: Registering node %s for the 1st time\n", ip.c_str());
-                    registerNode(identity, ip);
-                }
-                registerFirstTime = false;
-                
-                if(identity == LEADER){
-                    updateLeader(ip);
-                }
-                reply.Clear();
-                addNodeDataToReply(&reply);
-                
-                if(!stream->Write(reply)) {
-                    break;
-                }
-                dbgprintf("[INFO]: sent heartbeat reply\n");
+            if(registerFirstTime) 
+            {
+                dbgprintf("[DEBUG] %s: Registering node %s for the 1st time\n", __func__, ip.c_str());
+                registerNode(identity, ip);
             }
 
-            cout << "[ERROR]: stream broke" << endl;
-            eraseNode(ip);
+            registerFirstTime = false;
+                
+            if(identity == LEADER)
+            {
+                updateLeader(ip);
+            }
 
-            return Status::OK;
+            reply.Clear();
+            addNodeDataToReply(&reply);
+                
+            if(!stream->Write(reply)) 
+            {
+                break;
+            }
+            dbgprintf("[INFO] %s: sent heartbeat reply\n", __func__);
         }
+
+        cout << "[ERROR]: stream broke" << endl;
+        eraseNode(ip);
+
+        return Status::OK;
+    }
 };
 
-void* RunServerForClient(void* arg) {
-    string server_address("0.0.0.0:50051");
+/*
+*   @brief Starts a service for client requests 
+*/
+void* RunServerForClient(void* arg) 
+{
+    string server_address("0.0.0.0:50051"); // TODO: set from cli
     KeyValueService service;
 
     grpc::EnableDefaultHealthCheckService(true);
@@ -154,14 +227,18 @@ void* RunServerForClient(void* arg) {
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     unique_ptr<Server> server(builder.BuildAndStart());
-    cout << "Server for Client listening on " << server_address << std::endl;
+    cout << "LB Server for Client listening on " << server_address << std::endl;
 
     server->Wait();
 
     return NULL;
 }
 
-void* RunServerForNodes(void* arg) {
+/*
+*   @brief Starts a service for server node heartbeat requests 
+*/
+void* RunServerForNodes(void* arg) 
+{
     string server_address("0.0.0.0:50052");
     LBNodeCommService service;
     grpc::EnableDefaultHealthCheckService(true);
@@ -170,7 +247,7 @@ void* RunServerForNodes(void* arg) {
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     unique_ptr<Server> server(builder.BuildAndStart());
-    cout << "Server for Nodes listening on " << server_address << std::endl;
+    cout << "LB Server for Nodes listening on " << server_address << std::endl;
 
     server->Wait();
 
@@ -188,5 +265,4 @@ int main (int argc, char *argv[]){
 
     pthread_join(client_server_t, NULL);
     pthread_join(node_server_t, NULL);
-
 }
