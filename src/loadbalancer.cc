@@ -133,18 +133,21 @@ private:
     }
 
     /*
-    *   @brief Change identity of ip to Leader
+    *   @brief Change identity of ip
     *
     *   @param ip 
     */
-    void updateLeader(string ip) 
+    void setIdentityOfNode(string ip, int identity) 
     {
-        if(!leaderIP.empty()) 
+        if (nodes.count(ip) == 0)
         {
-            nodes[leaderIP].first = FOLLOWER;
+            nodes[ip] = make_pair(identity,
+                    new KeyValueClient (grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
         }
-        leaderIP = ip;
-        nodes[leaderIP].first = LEADER;
+        else
+        {
+            nodes[ip].first = identity;
+        }
     }
 
     /*
@@ -181,7 +184,6 @@ private:
 public:
     LBNodeCommService() {}
 
-    // TODO: Update server's identity
     /*
     *   @brief Receives heartbeat from a server node, 
     *          registers node if LB hasn't seen the node before
@@ -219,10 +221,7 @@ public:
 
             registerFirstTime = false;
                 
-            if(identity == LEADER)
-            {
-                updateLeader(ip);
-            }
+            setIdentityOfNode(ip, identity);
 
             reply.Clear();
             setHeartbeatReply(&reply);
