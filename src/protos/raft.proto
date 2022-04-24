@@ -6,7 +6,6 @@ service Raft
 {
     rpc ReqVote(ReqVoteRequest) returns (ReqVoteReply) {}
     rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesReply) {}
-    rpc AssertLeadership(AssertLeadershipRequest) returns (AssertLeadershipReply) {}
 }
 
 message ReqVoteRequest {
@@ -41,18 +40,3 @@ message AppendEntriesReply {
     bool success = 2;
 }
 
-message AssertLeadershipRequest {
-    string leaderID = 1;
-}
-
-message AssertLeadershipReply {
-    SystemState systemState = 1;
-}
-
-message SystemState {
-    repeated FollowerID followerID = 1;
-}
-
-message FollowerID {
-    string id = 1;
-}

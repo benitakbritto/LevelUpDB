@@ -72,6 +72,16 @@ private:
         return stub->GetFromDB(*request, reply);
     }
 
+    /*
+    *   @brief receive client request from client
+    *                 and replay to server node(s)
+    *
+    *   @param context 
+    *   @param request 
+    *   @param response 
+    *   @param offset 
+    *   @return gRPC status
+    */
     Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override 
     {
         dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -137,11 +147,11 @@ private:
     }
 
     /*
-    *   @brief Helper function
+    *   @brief Helper function to set reply for hearbeats
     *
     *   @param reply 
     */
-    void addNodeDataToReply(HeartBeatReply* reply) 
+    void setHeartbeatReply(HeartBeatReply* reply) 
     {
         NodeData* nodeData;
         for (auto& it: nodes) 
@@ -149,6 +159,21 @@ private:
             nodeData = reply->add_node_data();
             nodeData->set_ip(it.first);
             nodeData->set_identity(it.second.first);
+        }
+    }
+
+    /*
+    *   @brief Helper function to set reply for assert leadership
+    *
+    *   @param reply 
+    */
+    void setAssertLeadershipReply(AssertLeadershipReply* reply) 
+    {
+        FollowerIP* nodeData;
+        for (auto& it: nodes) 
+        {
+            nodeData = reply->add_follower_ip();
+            nodeData->set_ip(it.first);
         }
     }
 
@@ -162,6 +187,7 @@ public:
     *
     *   @param context
     *   @param stream 
+    *   @return gRPC status
     */
     Status SendHeartBeat(ServerContext* context, ServerReaderWriter<HeartBeatReply, HeartBeatRequest>* stream) override 
     {
@@ -197,7 +223,7 @@ public:
             }
 
             reply.Clear();
-            addNodeDataToReply(&reply);
+            setHeartbeatReply(&reply);
                 
             if(!stream->Write(reply)) 
             {
@@ -211,6 +237,43 @@ public:
 
         return Status::OK;
     }
+
+    /*
+    *   @brief Changes leader and sends leader a list of follower nodes
+    *
+    *   @param context
+    *   @param request 
+    *   @param reply
+    *   @return gRPC status
+    */
+    Status AssertLeadership(ServerContext* context,const AssertLeadershipRequest* request, AssertLeadershipReply* reply) override
+    {
+        dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+        dbgprintf("[DEBUG] %s: Previous leaderIP = %s\n", __func__, leaderIP.c_str());
+        // set previous leader to follower
+        if (nodes.count(leaderIP) != 0)
+        {
+            nodes[leaderIP].first = FOLLOWER;
+        }
+
+        // set new leader
+        leaderIP = request->leader_ip();
+        dbgprintf("[DEBUG] %s: New leaderIP = %s\n", __func__, leaderIP.c_str());
+        if (nodes.count(leaderIP) == 0)
+        {
+            nodes[leaderIP] = make_pair(LEADER,
+                    new KeyValueClient (grpc::CreateChannel(leaderIP, grpc::InsecureChannelCredentials())));
+        }
+        else
+        {
+            nodes[leaderIP].first = LEADER;
+        }
+        
+        setAssertLeadershipReply(reply);
+        dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+        return Status::OK;
+    }
+
 };
 
 /*

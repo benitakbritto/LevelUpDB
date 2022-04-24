@@ -34,7 +34,7 @@
 
 #include "server.h"
 #include "lb.grpc.pb.h"
-// #include "../util/levelDBWrapper.h" // TODO: Uncomment later
+// #include "../util/levelDBWrapper.h" // TOFIX: Build is failing
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -58,17 +58,25 @@ using namespace std;
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
+string lb_addr = "0.0.0.0:50052";
+
 StateHelper g_stateHelper;
 ServerImplementation serverImpl;
 unordered_map <string, pair<int, unique_ptr<Raft::Stub>>> g_nodeList;
-
-// TODO: Use command line args
-// string self_addr_lb = "0.0.0.0:50051";
-string lb_addr = "0.0.0.0:50052";
+ServerImplementation* signalHandlerService;
 
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
+
+// for debug
+void PrintNodesInNodeList()
+{
+    for (auto &item: g_nodeList)
+    {
+        dbgprintf("[DEBUG]: ip = %s| identity = %d\n", item.first.c_str(), item.second.first);
+    }
+}
 
 class KeyValueOpsServiceImpl final : public KeyValueOps::Service 
 {
@@ -127,20 +135,45 @@ void *RunKeyValueServer(void* args)
 
 class LBNodeCommClient 
 {
-    private:
-        unique_ptr<LBNodeComm::Stub> stub_;
-        int identity;
-        string ip;
-        // ServerImplementation serverImpl;
+private:
+    unique_ptr<LBNodeComm::Stub> stub_;
+    int identity;
+    string ip;
+    
+    // TOFIX: giving error E0424 05:31:57.689696293  370400 dns_resolver_ares.cc:477]   no server name supplied in dns URI
+    void updateFollowersInNodeList(AssertLeadershipReply *reply)
+    {
+        dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+        for (int i = 0; i < reply->follower_ip_size(); i++)
+        {
+            auto nodeData = reply->follower_ip(i);
+            string ip = nodeData.ip();
+            dbgprintf("[DEBUG] %s: ip = %s\n", __func__, ip.c_str());
+            // new node
+            if (g_nodeList.count(ip) == 0)
+            {
+                g_nodeList[ip] = make_pair(FOLLOWER, 
+                                            Raft::NewStub(grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
+            }
+            // old node, update identity
+            else
+            {
+                g_nodeList[ip].first = FOLLOWER;
+            }
+
+            // TODECIDE: Should we delete nodes?
+        }
+        dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+    }
   
-    public:
-        LBNodeCommClient(string target_str, int _identity, string _ip) {
+public:
+    LBNodeCommClient(string target_str, int _identity, string _ip) {
             identity = _identity;
             stub_ = LBNodeComm::NewStub(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
             ip = _ip;
         }
 
-        void SendHeartBeat() {
+    void SendHeartBeat() {
             ClientContext context;
             
             shared_ptr<ClientReaderWriter<HeartBeatRequest, HeartBeatReply> > stream(
@@ -165,7 +198,36 @@ class LBNodeCommClient
                 sleep(HB_SLEEP_IN_SEC);
             }
         }
+
+    void InvokeAssertLeadership()
+    {
+        dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+        AssertLeadershipRequest request;
+        AssertLeadershipReply reply;
+        Status status;
+        int retryCount = 0;
+
+        request.set_leader_ip(serverImpl.GetMyIp());
+
+        do
+        {
+            ClientContext context;
+            reply.Clear();            
+                
+            status = stub_->AssertLeadership(&context, request, &reply);
+            dbgprintf("[DEBUG]: status code = %d\n", status.error_code());
+            retryCount++;
+            sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
+
+        } while (status.error_code() == StatusCode::UNAVAILABLE);
+
+        updateFollowersInNodeList(&reply);
+        dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+    }
+
 };
+
+LBNodeCommClient lBNodeCommClient(lb_addr, LEADER, lb_addr); // TODO: find better way to do this
 
 void *StartHB(void* args) 
 {
@@ -174,11 +236,13 @@ void *StartHB(void* args)
     dbgprintf("[DEBUG]: %s: ip = %s\n", __func__, ip.c_str());
     int identity_enum = LEADER;
 
-    LBNodeCommClient lBNodeCommClient(lb_addr, identity_enum, ip);
+    // TODO: To we need identity_enum?
+    // LBNodeCommClient lBNodeCommClient(lb_addr, identity_enum, ip);
     lBNodeCommClient.SendHeartBeat();
 
     return NULL;
 }
+
 
 void ServerImplementation::SetMyIp(string ip)
 {
@@ -189,13 +253,13 @@ string ServerImplementation::GetMyIp()
 {
     return _myIp;
 }
-ServerImplementation* signalHandlerService;// TODO: Move to global
+
 void signalHandler(int signum) {
     signalHandlerService->AlarmCallback();
 	return;
 }
 
-// TODO: Fix param
+// TODO: Fix param - is it fixed?
 void ServerImplementation::ServerInit() 
 {    
     dbgprintf("[DEBUG]: %s: Inside function\n", __func__);
@@ -238,7 +302,6 @@ void ServerImplementation::BuildSystemStateFromHBReply(HeartBeatReply reply)
         auto nodeData = reply.node_data(i);
         g_nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
                                             Raft::NewStub(grpc::CreateChannel(nodeData.ip(), grpc::InsecureChannelCredentials())));
-        // dbgprintf("%s : %d \n", nodeData.ip().c_str(), nodeData.identity());
     }
 }
 
@@ -479,9 +542,11 @@ void ServerImplementation::becomeLeader()
     setNextIndexToLeaderLastIndex();
     setMatchIndexToLeaderLastIndex();
 
-    // TODO call AssertLeadership
-    // TODO Uncomment later
-    // thread(&ServerImplementation::invokePeriodicAppendEntries, this).detach();
+    // inform LB
+    lBNodeCommClient.InvokeAssertLeadership();
+
+    // to maintain leadership
+    thread(&ServerImplementation::invokePeriodicAppendEntries, this).detach();
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
@@ -516,20 +581,6 @@ void ServerImplementation::setMatchIndexToLeaderLastIndex()
     }
 }
 
-void ServerImplementation::dummySetHostList()
-{
-    // TODO: Move node list here
-}
-
-vector<string> ServerImplementation::dummyGetHostList() 
-{
-    // TODO: Move node list here
-    vector<string> nodes_list;
-    nodes_list.push_back("0.0.0.0:40000");
-    nodes_list.push_back("0.0.0.0:40001");
-    return nodes_list;
-}
-
 void ServerImplementation::becomeFollower() 
 {
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
@@ -538,7 +589,6 @@ void ServerImplementation::becomeFollower()
 /* 
     Invoked when timeout signal is received - 
 */
-
 void ServerImplementation::becomeCandidate() {
     g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
     dbgprintf("INFO] Become Candidate\n");
@@ -706,21 +756,6 @@ Status ServerImplementation::ReqVote(ServerContext* context, const ReqVoteReques
     return grpc::Status::CANCELLED;
 }
 
-
-// TODO
-/* Currently using AssertLeadership as heartbeat from leader to nodes. Will be using AppendEntries */
-grpc::Status ServerImplementation::AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply)
-{
-    cout<<"[INFO]: Received HB from Leader"<<endl;
-
-    g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
-    resetElectionTimeout();
-    setAlarm(_electionTimeout);
-    
-    return grpc::Status::OK;
-}
-
-
 void RunServer(string my_ip) {
     //string server_address("0.0.0.0:50051");
 
@@ -739,17 +774,18 @@ void RunServer(string my_ip) {
 
 // @usage: ./server <ip with port>
 int main(int argc, char **argv) {
-    pthread_t kv_server_t;
-    pthread_t hb_t;
+    // TODO: Uncomment later
+    // pthread_t kv_server_t;
+    // pthread_t hb_t;
     
-    pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
-    pthread_create(&hb_t, NULL, StartHB, argv[1]);
+    // pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
+    // pthread_create(&hb_t, NULL, StartHB, argv[1]);
 
-    vector<string> hostList;
-    RunServer(argv[1]);
+    // vector<string> hostList;
+    // RunServer(argv[1]);
 
-    pthread_join(hb_t, NULL);
-    pthread_join(kv_server_t, NULL);
-    
+    // pthread_join(hb_t, NULL);
+    // pthread_join(kv_server_t, NULL);
+
     return 0;
 }

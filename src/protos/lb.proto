@@ -4,6 +4,7 @@ package kvstore;
 
 service LBNodeComm {
     rpc SendHeartBeat(stream HeartBeatRequest) returns (stream HeartBeatReply) {}
+    rpc AssertLeadership(AssertLeadershipRequest) returns (AssertLeadershipReply) {}
 }
 
 message HeartBeatRequest {
@@ -18,4 +19,16 @@ message HeartBeatReply {
 message NodeData {
     string ip = 1;
     uint32 identity = 2;
+}
+
+message AssertLeadershipRequest {
+    string leader_ip = 1;
+}
+
+message AssertLeadershipReply {
+    repeated FollowerIP follower_ip = 1;
+}
+
+message FollowerIP {
+    string ip = 1;
 }

@@ -75,7 +75,7 @@ private:
   AppendEntriesRequest prepareRequestForAppendEntries(string followerip, int nextIndex);
 
   int GetMajorityCount();
-
+ 
 public:
   void AlarmCallback();
   void SetMyIp(string ip);
@@ -89,9 +89,9 @@ public:
   void ExecuteCommands(int start, int end);
   void BuildSystemStateFromHBReply(HeartBeatReply reply);
 
-  Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
-  Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
-  Status AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply) override;
+  Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply);
+  Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply);
+
 };
 
 #endif
