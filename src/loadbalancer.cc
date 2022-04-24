@@ -29,6 +29,7 @@ using namespace std;
  *****************************************************************************/
 unordered_map<string, pair<int, KeyValueClient*>> nodes; // <ip: <id, stub>>
 string leaderIP;
+int g_currentTerm = 0;
 
 /******************************************************************************
  * DECLARATION
@@ -251,26 +252,36 @@ public:
     {
         dbgprintf("[DEBUG] %s: Entering function\n", __func__);
         dbgprintf("[DEBUG] %s: Previous leaderIP = %s\n", __func__, leaderIP.c_str());
-        // set previous leader to follower
-        if (nodes.count(leaderIP) != 0)
+        
+        // Only update the leader if it is from the right term
+        if (g_currentTerm < request->term())
         {
-            nodes[leaderIP].first = FOLLOWER;
-        }
+            g_currentTerm = request->term();
 
-        // set new leader
-        leaderIP = request->leader_ip();
-        dbgprintf("[DEBUG] %s: New leaderIP = %s\n", __func__, leaderIP.c_str());
-        if (nodes.count(leaderIP) == 0)
-        {
-            nodes[leaderIP] = make_pair(LEADER,
-                    new KeyValueClient (grpc::CreateChannel(leaderIP, grpc::InsecureChannelCredentials())));
+            // set previous leader to follower
+            if (nodes.count(leaderIP) != 0)
+            {
+                nodes[leaderIP].first = FOLLOWER;
+            }
+
+            // set new leader
+            leaderIP = request->leader_ip();
+            dbgprintf("[DEBUG] %s: New leaderIP = %s\n", __func__, leaderIP.c_str());
+            if (nodes.count(leaderIP) == 0)
+            {
+                nodes[leaderIP] = make_pair(LEADER,
+                        new KeyValueClient (grpc::CreateChannel(leaderIP, grpc::InsecureChannelCredentials())));
+            }
+            else
+            {
+                nodes[leaderIP].first = LEADER;
+            }       
+            setAssertLeadershipReply(reply);
         }
         else
         {
-            nodes[leaderIP].first = LEADER;
+            dbgprintf("[INFO] %s: Bad leader\n", __func__);
         }
-        
-        setAssertLeadershipReply(reply);
         dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
         return Status::OK;
     }

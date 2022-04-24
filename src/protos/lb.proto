@@ -22,7 +22,8 @@ message NodeData {
 }
 
 message AssertLeadershipRequest {
-    string leader_ip = 1;
+    uint32 term = 1;
+    string leader_ip = 2;
 }
 
 message AssertLeadershipReply {

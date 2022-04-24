@@ -195,6 +195,7 @@ void LBNodeCommClient::InvokeAssertLeadership()
     Status status;
     int retryCount = 0;
 
+    request.set_term(g_stateHelper.GetCurrentTerm());
     request.set_leader_ip(serverImpl.GetMyIp());
 
     do
