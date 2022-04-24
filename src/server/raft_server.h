@@ -40,10 +40,7 @@ private:
   unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
   MutexMap _lockHelper;
   string _myIp;
-  // std::map<string,std::unique_ptr<Raft::Stub>> _stubs; // TODO: use nodes
-  // const std::vector<std::string> _hostList; // TODO: use nodes
-
-  LevelDBWrapper _levelDBWrapper;
+  
   int _hostCount;
   atomic<int> _votesGained;
   int _electionTimeout;

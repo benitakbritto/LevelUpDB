@@ -36,7 +36,7 @@
 #include "../util/common.h"
 #include "../util/state_helper.h"
 #include "raft_server.h"
-#include "../util/levelDBWrapper.h" // TODO: Build failing
+// #include "../util/levelDBWrapper.h" // TODO: Build failing
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -61,6 +61,7 @@ using namespace std;
  * GLOBALS
  *****************************************************************************/
 StateHelper g_stateHelper;
+LevelDBWrapper g_levelDBWrapper;
 RaftServer serverImpl;
 unordered_map <string, pair<int, unique_ptr<Raft::Stub>>> g_nodeList;
 RaftServer* signalHandlerService;
@@ -744,7 +745,7 @@ void RaftServer::setAlarm(int after_ms) {
 *                   Case 1: Leader term < my term, reject the RPC
 *                   Case 2: Candidate receives valid AppendEntries RPC
 *                               a: in case of mismatch in term at log index , reject
-*                               b. otherwise, apply entries to log and execute commands
+*                               b: otherwise, apply entries to log and execute commands
 *
 *   @param context 
 *   @param request 
