@@ -36,7 +36,7 @@
 #include "../util/common.h"
 #include "../util/state_helper.h"
 #include "raft_server.h"
-// #include "../util/levelDBWrapper.h" // TODO: Build failing
+#include "../util/levelDBWrapper.h" // TODO: Build failing
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -79,15 +79,14 @@ void PrintNodesInNodeList()
  * DECLARATION: KeyValueOpsServiceImpl
  *****************************************************************************/
 // TODO: use leveldb
-
-Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply)  
+grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply)  
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
-    return Status::OK;
+    return grpc::Status::OK;
 }
 
-Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply)  
+grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply)  
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);            
     serverImpl.ClearAppendEntriesMap();
@@ -105,7 +104,7 @@ Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutRequest* 
     serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
             
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
-    return Status::OK;
+    return grpc::Status::OK;
 }
 
 void *RunKeyValueServer(void* args) 
@@ -209,7 +208,7 @@ void LBNodeCommClient::InvokeAssertLeadership()
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     AssertLeadershipRequest request;
     AssertLeadershipReply reply;
-    Status status;
+    grpc::Status status;
     int retryCount = 0;
 
     request.set_term(g_stateHelper.GetCurrentTerm());
@@ -495,7 +494,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
     // Init params to invoke the RPC
     AppendEntriesRequest request;
     AppendEntriesReply reply;
-    Status status;
+    grpc::Status status;
     int nextIndex = 0;
     int matchIndex = 0;
     int retryCount = 0;
@@ -564,7 +563,7 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
     req.set_term(g_stateHelper.GetCurrentTerm());
     req.set_candidateid(_myIp);
     req.set_lastlogindex(g_stateHelper.GetLogLength());
-    cout<< g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1);
+    //cout<< g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1);
     req.set_lastlogterm(g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1));
 
     ReqVoteReply reply;
@@ -753,7 +752,7 @@ void RaftServer::setAlarm(int after_ms) {
 *
 *   @return grpc Status
 */
-Status RaftServer::AppendEntries(ServerContext* context, 
+grpc::Status RaftServer::AppendEntries(ServerContext* context, 
                                             const AppendEntriesRequest* request, 
                                             AppendEntriesReply *reply)
 {
@@ -767,7 +766,7 @@ Status RaftServer::AppendEntries(ServerContext* context,
         dbgprintf("[DEBUG]: AppendEntries RPC - leader term < my term\n");
         reply->set_term(my_term);
         reply->set_success(false);
-        return Status::OK;
+        return grpc::Status::OK;
     }
 
     // Case 2: Candidate receives valid AppendEntries RPC
@@ -785,7 +784,7 @@ Status RaftServer::AppendEntries(ServerContext* context,
             dbgprintf("[DEBUG]: AppendEntries RPC - term mismatch at log index\n");
             reply->set_term(my_term);
             reply->set_success(false);
-            return Status::OK;
+            return grpc::Status::OK;
         } 
         else 
         {   
@@ -816,12 +815,12 @@ Status RaftServer::AppendEntries(ServerContext* context,
 
             reply->set_term(my_term);
             reply->set_success(true);
-            return Status::OK;
+            return grpc::Status::OK;
         }
     }
 
     dbgprintf("[DEBUG]: AppendEntries - Exiting RPC\n");
-    return Status::OK;
+    return grpc::Status::OK;
 }
 
 /* 
@@ -857,9 +856,9 @@ void RaftServer::ExecuteCommands(int start, int end)
 *   @return grpc Status
 *
 */
-Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
+grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
 {
-    cout<<"Received reqvote from "<<request->candidateid()<<" --- "<<request->term()<<endl;
+    cout<<"[INFO] Received ReqVote from "<<request->candidateid()<<" for term "<<request->term()<<endl;
 
     reply->set_votegrantedfor(false);
     reply->set_term(g_stateHelper.GetCurrentTerm());

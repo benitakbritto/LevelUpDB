@@ -16,7 +16,7 @@
 #include "../util/locks.h"
 #include "../util/common.h"
 #include "../util/state_helper.h"
-// #include "../util/levelDBWrapper.h"
+#include "../util/levelDBWrapper.h"
 #include <csignal>
 #include <ctime>
 #include <cerrno>
@@ -43,7 +43,7 @@ private:
   // std::map<string,std::unique_ptr<Raft::Stub>> _stubs; // TODO: use nodes
   // const std::vector<std::string> _hostList; // TODO: use nodes
 
-  // LevelDBWrapper _levelDBWrapper;
+  LevelDBWrapper _levelDBWrapper;
   int _hostCount;
   atomic<int> _votesGained;
   int _electionTimeout;
@@ -86,8 +86,8 @@ public:
   void ExecuteCommands(int start, int end);
   void BuildSystemStateFromHBReply(HeartBeatReply reply);
 
-  Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply);
-  Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply);
+  grpc::Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply);
+  grpc::Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply);
 
 };
 

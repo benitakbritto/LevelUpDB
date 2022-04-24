@@ -70,9 +70,9 @@ add_custom_command(
 
 # Include generated *.pb.h files
 # TODO: Uncomment later
-# include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${SNAPPY_INCLUDE_DIR}" "${LEVELDB_INCLUDE_DIR}")
+include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${SNAPPY_INCLUDE_DIR}" "${LEVELDB_INCLUDE_DIR}")
 # TODO: Remove
-include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${LEVELDB_INCLUDE_DIR}") 
+# include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${LEVELDB_INCLUDE_DIR}") 
 
 # Proto file 1
 add_library(lb_grpc_proto
@@ -139,11 +139,11 @@ target_link_libraries(state_helper
     replicated_log_volatile
     state_volatile)
 
-# TODO: Uncomment later
-# add_executable(levelDBWrapper "util/levelDBWrapper.cc")
-# target_link_libraries(levelDBWrapper  
-#     ${LEVELDB_LIBRARY}
-#     ${SNAPPY_LIBRARY})
+# TODO: Comment out later - verifying if leveldb is functioning or not
+add_executable(levelDBWrapper "util/levelDBWrapper.cc")
+target_link_libraries(levelDBWrapper  
+    ${LEVELDB_LIBRARY}
+    ${SNAPPY_LIBRARY})
 
 # Server
 foreach(_target
@@ -157,6 +157,7 @@ foreach(_target
     lb_grpc_proto
     raft_grpc_proto
     ${LEVELDB_LIBRARY}
+    ${SNAPPY_LIBRARY}
     ${_REFLECTION}
     ${_GRPC_GRPCPP}
     ${_PROTOBUF_LIBPROTOBUF})
