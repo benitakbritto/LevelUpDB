@@ -3,7 +3,7 @@
 
 #include "common.h"
 #include <thread>
-
+#include <unistd.h>
 #include <cassert>
 #include <iostream>
 #include "leveldb/db.h"
@@ -27,7 +27,7 @@ class LevelDBWrapper {
     public:
     LevelDBWrapper(){
         options.create_if_missing = true;
-        leveldb::Status status = DB::Open(options, "/tmp/testdb", &db);
+        leveldb::Status status = DB::Open(options, "/tmp/testdb"+to_string(getpid()), &db);
         assert(status.ok());
         write_options.sync = true;
     }

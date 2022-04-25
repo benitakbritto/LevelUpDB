@@ -88,7 +88,8 @@ grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const Get
 
 grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply)  
 {
-    dbgprintf("[DEBUG] %s: Entering function\n", __func__);            
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+
     serverImpl.ClearAppendEntriesMap();
             
     g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value());        
@@ -97,7 +98,8 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
     // wait for majority
     do 
     {
-        // dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
+        dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
+        sleep(1);
     } while(!serverImpl.ReceivedMajority());
             
     g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1);
@@ -146,6 +148,9 @@ void LBNodeCommClient::updateFollowersInNodeList(AssertLeadershipReply *reply)
         // new node
         if (g_nodeList.count(ip) == 0)
         {
+            int leaderLastIndex = g_stateHelper.GetLogLength();
+            g_stateHelper.SetNextIndex(ip, leaderLastIndex);
+            g_stateHelper.SetMatchIndex(ip, leaderLastIndex);
             g_nodeList[ip] = make_pair(FOLLOWER, 
                                             Raft::NewStub(grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
         }
@@ -294,10 +299,10 @@ void RaftServer::ServerInit()
     // hostList = {"0.0.0.0:50051", "0.0.0.0:50052", "0.0.0.0:50053"};
 
     //Initialize states
-    g_stateHelper.AddCurrentTerm(0); // TODO @Shreyansh: need to read the term and not set to 0 at all times
+    g_stateHelper.Append(0, "NULL", "NULL"); // To-Do: Need some initial data on file creation. Not a problem if file already exists.
+    g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1); // TODO @Shreyansh: need to read the term and not set to 0 at all times
     g_stateHelper.SetCommitIndex(0);
     g_stateHelper.SetLastAppliedIndex(0);
-    // g_stateHelper.Append(0, "NULL", "NULL"); // To-Do: Need some initial data on file creation. Not a problem if file already exists.
 
     int old_errno = errno;
     errno = 0;
@@ -332,7 +337,16 @@ void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply)
     for (int i = 0; i < reply.node_data_size(); i++)
     {
         auto nodeData = reply.node_data(i);
-        g_nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
+        if(g_nodeList.count(nodeData.ip())==0)
+        {
+            if(g_stateHelper.GetIdentity() == LEADER)
+            {
+                int leaderLastIndex = g_stateHelper.GetLogLength();
+                g_stateHelper.SetNextIndex(nodeData.ip(), leaderLastIndex);
+                g_stateHelper.SetMatchIndex(nodeData.ip(), leaderLastIndex);
+            }
+
+            g_nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
                                             Raft::NewStub(grpc::CreateChannel(nodeData.ip(), grpc::InsecureChannelCredentials())));
    
         if(g_stateHelper.GetIdentity() == LEADER)
@@ -340,6 +354,11 @@ void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply)
             int leaderLastIndex = g_stateHelper.GetLogLength();
             g_stateHelper.SetNextIndex(nodeData.ip(), leaderLastIndex);
             g_stateHelper.SetMatchIndex(nodeData.ip(), leaderLastIndex);
+        }
+        else
+        {
+            g_nodeList[nodeData.ip()].first = nodeData.identity();
+        }
         }
     }
 }
@@ -417,6 +436,7 @@ void RaftServer::runForElection()
     for (auto& node: g_nodeList) {
         if (node.first !=GetMyIp()) {
             std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
+            //invokeRequestVote(node.first);
         }
     }
     
@@ -497,6 +517,11 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
 void RaftServer::invokeAppendEntries(string followerIp) 
 {
     dbgprintf("[DEBUG] %s: Entering function with followerIp = %s\n", __func__, followerIp.c_str());
+
+    if(g_stateHelper.GetIdentity() != LEADER)
+    {
+        return;
+    }
     
     // Init params to invoke the RPC
     AppendEntriesRequest request;
@@ -515,8 +540,8 @@ void RaftServer::invokeAppendEntries(string followerIp)
     {
         request = prepareRequestForAppendEntries(followerIp, nextIndex);
         // TODO: Use nodeList data structure
-        auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
-
+        //auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
+        auto stub = g_nodeList[followerIp].second.get();
         // Retry RPC indefinitely if follower is down
         retryCount = 0;
         do
@@ -529,7 +554,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
             retryCount++;
             sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
 
-        } while (status.error_code() == StatusCode::UNAVAILABLE);
+        } while (status.error_code() == StatusCode::UNAVAILABLE && g_stateHelper.GetIdentity() == LEADER);
       
         // Check if RPC should be retried because of log inconsistencies
         shouldRetry = (request.term() >= reply.term() && !reply.success());
@@ -542,7 +567,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
             g_stateHelper.SetMatchIndex(followerIp, matchIndex-1);
         }
 
-    } while (shouldRetry);
+    } while (shouldRetry && g_stateHelper.GetIdentity() == LEADER);
 
     // Leader becomes follower
     if (request.term() < reply.term())
@@ -555,6 +580,9 @@ void RaftServer::invokeAppendEntries(string followerIp)
         dbgprintf("[DEBUG] %s: RPC sucess\n", __func__);
         g_stateHelper.SetMatchIndex(followerIp, g_stateHelper.GetLogLength()-1);
     }
+
+
+    _appendEntriesResponseMap[followerIp] = reply;
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
@@ -569,8 +597,7 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 
     req.set_term(g_stateHelper.GetCurrentTerm());
     req.set_candidateid(_myIp);
-    req.set_lastlogindex(g_stateHelper.GetLogLength());
-    //cout<< g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1);
+    req.set_lastlogindex(g_stateHelper.GetLogLength()-1);
     req.set_lastlogterm(g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1));
 
     ReqVoteReply reply;
@@ -580,6 +607,7 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 
     grpc::Status status = stub->ReqVote(&context, req, &reply);
 
+    resetElectionTimeout();
     setAlarm(_electionTimeout);
 
     if(status.ok() && reply.votegrantedfor())
@@ -649,7 +677,7 @@ void RaftServer::becomeLeader()
 */ 
 void RaftServer::invokePeriodicAppendEntries()
 {
-    while (1)
+    while (g_stateHelper.GetIdentity() == LEADER)
     {
         dbgprintf("[INFO] %s: Raising periodic Append Entries\n", __func__);
         BroadcastAppendEntries();
@@ -766,6 +794,9 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
     dbgprintf("[DEBUG]: AppendEntries - Entering RPC\n");
     int my_term = 0;
 
+    resetElectionTimeout();
+    setAlarm(_electionTimeout);
+
     // Case 1: leader term < my term
     my_term = g_stateHelper.GetCurrentTerm();
     if (request->term() < my_term)
@@ -865,7 +896,7 @@ void RaftServer::ExecuteCommands(int start, int end)
 */
 grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply)
 {
-    cout<<"[INFO] Received ReqVote from "<<request->candidateid()<<" for term "<<request->term()<<endl;
+    cout<<"[ELECTION] Received Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<endl;
 
     reply->set_votegrantedfor(false);
     reply->set_term(g_stateHelper.GetCurrentTerm());
@@ -873,6 +904,7 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
     // Case 1
     if(request->term() < g_stateHelper.GetCurrentTerm())
     {
+        cout<<"[ELECTION] Rejected Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<" Reason: Lesser Term"<<endl;
         return grpc::Status::OK;
     }
 
@@ -888,6 +920,8 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
     {
         if(request->lastlogterm() > g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength() - 1))
         {
+            cout<<"[ELECTION] Granted Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<" Reason: Case A"<<endl;
+
             g_stateHelper.AddVotedFor(request->term(), request->candidateid());
             reply->set_votegrantedfor(true);
 
@@ -896,14 +930,17 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
 
         if(request->lastlogterm() == g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength() - 1))
         {
-            if(request->lastlogindex() > g_stateHelper.GetLogLength()-1)
+            if(request->lastlogindex() >= g_stateHelper.GetLogLength()-1)
             {
+                cout<<"[ELECTION] Granted Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<" Reason: Case B"<<endl;
+                g_stateHelper.AddVotedFor(request->term(), request->candidateid());
                 reply->set_votegrantedfor(true);
 
                 return grpc::Status::OK;
             }
         }
     }
+    cout<<"[ELECTION] Rejected Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<" Reason: Else"<<endl;
 
     return grpc::Status::OK;
 }
