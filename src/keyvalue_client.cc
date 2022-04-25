@@ -30,17 +30,22 @@ int main(int argc, char** argv)
 {
     string target_str = "0.0.0.0:50051"; // LoadBalancer - acting as server for client
     KeyValueClient* keyValueClient = new KeyValueClient(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
-    PutRequest request;
-    PutReply reply;
+    PutRequest putRequest;
+    PutReply putReply;
 
-    request.set_key("k1");
-    request.set_value("v1");
+    putRequest.set_key("k1");
+    putRequest.set_value("v1");
 
+    GetRequest getRequest;
+    GetReply getReply;
+    getRequest.set_key("k1");
+    getRequest.set_consistency_level(0);
 
     dbgprintf("[DEBUG] Client contacting LB\n");
-    Status putStatus = keyValueClient->PutToDB(request, &reply);
-
-    cout << putStatus.error_code() << endl;
+    // Status putStatus = keyValueClient->PutToDB(putRequest, &putReply);
+    // cout << putStatus.error_code() << endl;
      
+    Status getStatus = keyValueClient->GetFromDB(getRequest, &getReply);
+    cout << getStatus.error_code() << endl;
     return 0;
 }

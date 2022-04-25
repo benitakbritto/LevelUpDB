@@ -10,6 +10,7 @@ service KeyValueOps
 
 message GetRequest {
     string key = 1;
+    uint32 consistency_level = 2;
 }
 
 message GetReply {

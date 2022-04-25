@@ -1,6 +1,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <thread>
 #include <grpcpp/grpcpp.h>
 #include "keyvalueops.grpc.pb.h"
 #include "lb.grpc.pb.h"
@@ -27,7 +28,7 @@ using namespace std;
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
-unordered_map<string, pair<int, KeyValueClient*>> nodes; // <ip: <id, stub>>
+unordered_map<string, pair<int, KeyValueClient*>> g_nodeList; // <ip: <id, stub>>
 string leaderIP;
 int g_currentTerm = 0;
 
@@ -40,8 +41,8 @@ int g_currentTerm = 0;
 class KeyValueService final : public KeyValueOps::Service 
 {
 private:
-    int idx = 0; // for round-robin
-
+    int idx = 0; 
+    unordered_map<string, int> _valCountMap; // <value:frequency> map
     /*
     *   @brief Gets server ip using round robin
     *
@@ -49,11 +50,20 @@ private:
     */
     KeyValueClient* getServerIPToRouteTo()
     {
-        idx = (++idx) % (nodes.size());
-        auto it = nodes.begin();
+        idx = (++idx) % (g_nodeList.size());
+        auto it = g_nodeList.begin();
         advance(it, idx);
         dbgprintf("[DEBUG] %s: Routing to %s\n", __func__, (it->first).c_str());
         return it->second.second;
+    }
+
+    /* @brief get the stub for the leader ip
+    * 
+    * @return stub
+    */
+    KeyValueClient* getLeaderStub()
+    {
+        return g_nodeList[leaderIP].second;
     }
 
     // TODO: Reads should go to leader for strong consistency
@@ -70,10 +80,118 @@ private:
     Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override 
     {
         dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-        KeyValueClient* stub = getServerIPToRouteTo();
-        return stub->GetFromDB(*request, reply);
+        KeyValueClient* stub;
+        int consistencyLevel;
+        
+        consistencyLevel = request->consistency_level();
+        dbgprintf("[DEBUG}: Consistency level:%d\n", consistencyLevel);
+        if (consistencyLevel == STRONG_LEADER)
+        {
+            stub = getLeaderStub();
+            dbgprintf("[DEBUG}: Calling stub for leader\n");
+            return stub->GetFromDB(*request, reply);
+        }
+
+        else if (consistencyLevel == STRONG_MAJORITY)
+        {
+            // iterate over g_nodeList
+            for(auto& node: g_nodeList) 
+            {
+                std::thread(&KeyValueService::invokeGetFromDB, this, node.second.second, request, reply).detach();
+            }
+
+            do{
+                // wait for majority
+            }
+            while(!receivedMajorityValue());
+
+            reply->set_value(getMajorityResp());
+            return Status::OK;
+        }
+        else { 
+            stub = getServerIPToRouteTo();
+            return stub->GetFromDB(*request, reply);
+        }    
     }
 
+    /*
+    *   @brief calculates the number of responses needed for majority
+    *          
+    *   @return majority count
+    */
+    int GetMajorityCount() // TODO: Move to util
+    {
+        int size = g_nodeList.size();
+        return (size % 2 == 0) ? (size / 2) : (size / 2) + 1;
+    }
+
+    /*
+    *   @brief checks if majority responses have been received
+    *          
+    *   @return 
+    *       true : on receiving majority or if there is only one node in the cluster
+    *       false: otherwise
+    */
+    bool receivedMajorityValue() // TODO: Move to util
+    {
+        // Leader is the only node alive
+        if (g_nodeList.size() == 1) 
+        {
+            return true;
+        }
+
+        int count = 0;
+        
+        for (auto& it: _valCountMap) {
+            int count = it.second;
+            if(count >= GetMajorityCount())
+            {
+                return true; // break on receiving majority
+            }
+        }
+        return false;
+    }
+
+    /*
+    *   @brief sends GetFromDB to specified stub,
+    *           and updates valCountMap on receiving reply
+    * 
+    *   @param stub
+    *   @param request
+    *   @param reply
+    */
+    void invokeGetFromDB(KeyValueClient* stub, const GetRequest* request, GetReply* reply)
+    {
+        Status status = stub->GetFromDB(*request, reply);
+        if (status.ok())
+        {
+            string value = reply->value();
+            int count = _valCountMap[value];
+            _valCountMap[value] = count + 1;
+        }
+    }
+
+    /*
+    *   @brief returns the value received from majority of g_nodeList
+    * 
+    *   @return value
+    */
+    string getMajorityResp() {
+        int max = 0;
+        string value;
+
+        for(auto valCount: _valCountMap)
+        {
+            if(valCount.second > max) 
+            {
+                max = valCount.second;
+                value = valCount.first;
+            }
+        }
+
+        return value;
+    }
+    
     /*
     *   @brief receive client request from client
     *                 and replay to server node(s)
@@ -89,20 +207,21 @@ private:
         dbgprintf("[DEBUG] %s: Entering function\n", __func__);
         dbgprintf("LeaderIP = %s\n", leaderIP.c_str());
         
-        KeyValueClient* stub = nodes[leaderIP].second;
+        KeyValueClient* stub = g_nodeList[leaderIP].second;
         
         return stub->PutToDB(*request, reply);
     } 
 
 public:
     KeyValueService(){}
+
 };
 
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
 /*
-*   @brief Communication between the LB and the server nodes (via heartbeats)
+*   @brief Communication between the LB and the server g_nodeList (via heartbeats)
 */
 class LBNodeCommService final: public LBNodeComm::Service 
 {
@@ -116,10 +235,10 @@ private:
     */
     void registerNode(int identity, string ip) 
     {
-        nodes[ip] = make_pair(identity,
+        g_nodeList[ip] = make_pair(identity,
                     new KeyValueClient (grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
         
-        dbgprintf("[DEBUG]: Length of nodes at LB: %ld", nodes.size());
+        dbgprintf("[DEBUG]: Length of g_nodeList at LB: %ld", g_nodeList.size());
     }
 
     /*
@@ -129,8 +248,8 @@ private:
     */
     void eraseNode(string ip) 
     {
-        nodes.erase(ip);
-        dbgprintf("[DEBUG] %s: Removed ip %s, Length of nodes at LB: %ld\n", __func__, ip.c_str(), nodes.size());
+        g_nodeList.erase(ip);
+        dbgprintf("[DEBUG] %s: Removed ip %s, Length of g_nodeList at LB: %ld\n", __func__, ip.c_str(), g_nodeList.size());
     }
 
     /*
@@ -140,14 +259,14 @@ private:
     */
     void setIdentityOfNode(string ip, int identity) 
     {
-        if (nodes.count(ip) == 0)
+        if (g_nodeList.count(ip) == 0)
         {
-            nodes[ip] = make_pair(identity,
+            g_nodeList[ip] = make_pair(identity,
                     new KeyValueClient (grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
         }
         else
         {
-            nodes[ip].first = identity;
+            g_nodeList[ip].first = identity;
         }
     }
 
@@ -159,7 +278,7 @@ private:
     void setHeartbeatReply(HeartBeatReply* reply) 
     {
         NodeData* nodeData;
-        for (auto& it: nodes) 
+        for (auto& it: g_nodeList) 
         {
             nodeData = reply->add_node_data();
             nodeData->set_ip(it.first);
@@ -175,7 +294,7 @@ private:
     void setAssertLeadershipReply(AssertLeadershipReply* reply) 
     {
         FollowerIP* nodeData;
-        for (auto& it: nodes) 
+        for (auto& it: g_nodeList) 
         {
             nodeData = reply->add_follower_ip();
             nodeData->set_ip(it.first);
@@ -188,7 +307,7 @@ public:
     /*
     *   @brief Receives heartbeat from a server node, 
     *          registers node if LB hasn't seen the node before
-    *          and sends back a list of all the alive server nodes in the reply
+    *          and sends back a list of all the alive server g_nodeList in the reply
     *
     *   @param context
     *   @param stream 
@@ -241,7 +360,7 @@ public:
     }
 
     /*
-    *   @brief Changes leader and sends leader a list of follower nodes
+    *   @brief Changes leader and sends leader a list of follower g_nodeList
     *
     *   @param context
     *   @param request 
@@ -259,22 +378,22 @@ public:
             g_currentTerm = request->term();
 
             // set previous leader to follower
-            if (nodes.count(leaderIP) != 0)
+            if (g_nodeList.count(leaderIP) != 0)
             {
-                nodes[leaderIP].first = FOLLOWER;
+                g_nodeList[leaderIP].first = FOLLOWER;
             }
 
             // set new leader
             leaderIP = request->leader_ip();
             dbgprintf("[DEBUG] %s: New leaderIP = %s\n", __func__, leaderIP.c_str());
-            if (nodes.count(leaderIP) == 0)
+            if (g_nodeList.count(leaderIP) == 0)
             {
-                nodes[leaderIP] = make_pair(LEADER,
+                g_nodeList[leaderIP] = make_pair(LEADER,
                         new KeyValueClient (grpc::CreateChannel(leaderIP, grpc::InsecureChannelCredentials())));
             }
             else
             {
-                nodes[leaderIP].first = LEADER;
+                g_nodeList[leaderIP].first = LEADER;
             }       
             setAssertLeadershipReply(reply);
         }
