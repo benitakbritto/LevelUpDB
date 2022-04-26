@@ -132,12 +132,22 @@ add_library(replicated_log_persistent "util/replicated_log_persistent.cc")
 add_library(replicated_log_volatile "util/replicated_log_volatile.cc")
 add_library(state_volatile "util/state_volatile.cc")
 add_library(state_helper "util/state_helper.cc")
+
+add_library(snapshot_persistent "util/snapshot_persistent.cc")
+add_library(snapshot_volatile "util/snapshot_volatile.cc")
+add_library(snapshot_helper "util/snapshot_helper.cc")
+
 target_link_libraries(state_helper
     term_vote_persistence
     term_vote_volatile
     replicated_log_persistent
     replicated_log_volatile
     state_volatile)
+
+
+target_link_libraries(snapshot_helper
+    snapshot_persistent
+    snapshot_volatile)
 
 # Uncomment if you need an executable to test and comment out the next line
 # add_executable(levelDBWrapper "util/levelDBWrapper.cc")
@@ -154,6 +164,7 @@ foreach(_target
   target_link_libraries(${_target}
     locks
     state_helper
+    snapshot_helper
     keyvalueops_grpc_proto
     lb_grpc_proto
     raft_grpc_proto

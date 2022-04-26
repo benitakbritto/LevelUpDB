@@ -2,12 +2,11 @@
 *   @brief Handles persistent snapshots
 */
 
-#ifndef SNAPSHOT_PERSISTENT_H
-#define SNAPSHOT_PERSISTENT_H
+#ifndef SNAPSHOT_VOLATILE_H
+#define SNAPSHOT_VOLATILE_H
 
 #include "common.h"
 #include <cstring>
-#include <fcntl.h>
 #include <unordered_map>
 /******************************************************************************
  * GLOBALS
@@ -24,13 +23,13 @@
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
-class PersistentSnapshot 
+class VolatileSnapshot 
 {
     private:
-       int writeSnapshotToFile(string snapshotFilePath);
-       void truncateLog();
-
+       unordered_map<string, string> snapshotObj;
+    
     public:
+        unordered_map<string,string> GetSnapshot();
         void SetSnapshot(unordered_map<string,string>);
 };
 

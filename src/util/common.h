@@ -20,6 +20,8 @@ enum ConsistencyLevel { STRONG_LEADER, STRONG_MAJORITY, EVENTUAL };
 #define HB_SLEEP_IN_SEC             3   
 #define REPLICATED_LOG_PATH         "/users/ssharma/CS739-P4/storage/replicated_log"
 #define TERM_VOTE_PATH              "/users/ssharma/CS739-P4/storage/term_vote"
+#define SNAPSHOT_PATH               "/users/ssharma/CS739-P4/storage/snapshot"
+#define HB_SLEEP_IN_SEC             10 
 #define LEADER_STR                  "LEADER"
 #define FOLLOWER_STR                "FOLLOWER"
 #define RETRY_TIME_START             1                                     

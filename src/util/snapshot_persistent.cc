@@ -1,19 +1,44 @@
 #include "snapshot_persistent.h"
+#include <sys/types.h>
+#include <unistd.h>
 
 /*
-*   @brief get snapshot
-*
-*   @return snapshot
+*   @brief Set snapshot and flush to storage, truncate current log
 */
-vector<string, string> PersistentSnapshot::GetSnapshot()
+void PersistentSnapshot::SetSnapshot(unordered_map<string, string> snapshot)
 {
-    return snapshotObj;
+
+    string snapshotFilePath = SNAPSHOT_PATH + to_string(getpid());
+    int fd = open(snapshotFilePath.c_str(), O_WRONLY | O_CREAT, 0666);
+
+    if (fd == -1) 
+    {
+       	cout << errno << endl;
+	    throw runtime_error("[ERROR]: Could not create snapshot file");
+    }
+
+    writeSnapshotToFile(snapshotFilePath);
+    truncateLog();
 }
 
 /*
-*   @brief Set snapshot
+*   @brief  Write snapshot obj to file
+*
+*   @param  snapshotFilePath
+*
+*   @return  error code
 */
-void PersistentSnapshot::SetSnapshot(vector<string, string> snapshot)
+int writeSnapshotToFile(string snapshotFilePath)
 {
-    snapshotObj = snapshot;
+    // TODO: Parse snapshot and write to file
+    return 0;
+}
+
+
+/*
+*   @brief  Truncate current log file
+*/
+void truncateLog() 
+{
+
 }
