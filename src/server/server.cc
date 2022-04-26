@@ -291,22 +291,13 @@ void signalHandler(int signum) {
 *          prepares to trigger alarm at the end of election timeout
 */
 
-// TODO: Fix param - is it fixed?
 void RaftServer::ServerInit() 
 {    
     dbgprintf("[DEBUG]: %s: Inside function\n", __func__);
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);    
-    // hostList = {"0.0.0.0:50051", "0.0.0.0:50052", "0.0.0.0:50053"};
-
-    //Initialize states
-    g_stateHelper.Append(0, "NULL", "NULL"); // To-Do: Need some initial data on file creation. Not a problem if file already exists.
-    g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1); // TODO @Shreyansh: need to read the term and not set to 0 at all times
-    g_stateHelper.SetCommitIndex(0);
-    g_stateHelper.SetLastAppliedIndex(0);
-
+    
     int old_errno = errno;
     errno = 0;
-    cout<<"[INIT] Server Init"<<endl;
     signal(SIGALRM, &signalHandler);
     
     if (errno) 
@@ -539,8 +530,6 @@ void RaftServer::invokeAppendEntries(string followerIp)
     do 
     {
         request = prepareRequestForAppendEntries(followerIp, nextIndex);
-        // TODO: Use nodeList data structure
-        //auto stub = Raft::NewStub(grpc::CreateChannel(followerIp, grpc::InsecureChannelCredentials()));
         auto stub = g_nodeList[followerIp].second.get();
         // Retry RPC indefinitely if follower is down
         retryCount = 0;
@@ -555,7 +544,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
             sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
 
         } while (status.error_code() == StatusCode::UNAVAILABLE && g_stateHelper.GetIdentity() == LEADER);
-      
+              
         // Check if RPC should be retried because of log inconsistencies
         shouldRetry = (request.term() >= reply.term() && !reply.success());
         dbgprintf("[DEBUG] %s: reply.term() = %d | reply.success() = %d\n", __func__, reply.term(), reply.success());
@@ -580,7 +569,6 @@ void RaftServer::invokeAppendEntries(string followerIp)
         dbgprintf("[DEBUG] %s: RPC sucess\n", __func__);
         g_stateHelper.SetMatchIndex(followerIp, g_stateHelper.GetLogLength()-1);
     }
-
 
     _appendEntriesResponseMap[followerIp] = reply;
 
@@ -727,8 +715,8 @@ void RaftServer::becomeFollower()
 void RaftServer::becomeCandidate() {
     g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
     dbgprintf("INFO] Become Candidate\n");
-    resetElectionTimeout();
-    setAlarm(_electionTimeout);
+    // resetElectionTimeout();
+    // setAlarm(_electionTimeout);
     runForElection();
 }
 
@@ -737,7 +725,7 @@ void RaftServer::becomeCandidate() {
 */
 void RaftServer::AlarmCallback() {
   if (g_stateHelper.GetIdentity() == ServerIdentity::LEADER) {
-    //ReplicateEntries();
+    // do nothing
   } else {
     becomeCandidate();
   }
@@ -946,12 +934,7 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
 }
 
 void RunServer(string my_ip) {
-    //string server_address("0.0.0.0:50051");
-
-    /* TO-DO : Initialize GRPC connections to all other servers */
-    serverImpl.SetMyIp(my_ip);
     ServerBuilder builder;
-    // builder.SetMaxReceiveMessageSize((1.5 * 1024 * 1024 * 1024));
     builder.AddListeningPort(serverImpl.GetMyIp(), grpc::InsecureServerCredentials());
     builder.RegisterService(&serverImpl);
     unique_ptr<Server> server(builder.BuildAndStart());

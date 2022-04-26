@@ -1,6 +1,13 @@
 // TODO: Add to cmake
 #include "state_helper.h"
 
+
+StateHelper::StateHelper()
+{
+    Init();
+}
+
+
 /*
 *   @brief Get the current term from mem
 */
@@ -158,6 +165,11 @@ void StateHelper::Init()
         if (entry.term > currentTerm) currentTerm = entry.term;
     }
 
+    if (GetLogLength() == 0)
+    {
+        Append(0, "NULL", "NULL");
+    }   
+
     vTermVoteObj.UpdateCurrentTerm(currentTerm);
 
     // Replicated log
@@ -167,6 +179,10 @@ void StateHelper::Init()
     {
         vReplicatedLogObj.Append(entry.term, entry.key, entry.value, entry.offset); 
     }
+
+    // Set volatile states
+    SetCommitIndex(0);
+    SetLastAppliedIndex(0);
 }
 
 /*

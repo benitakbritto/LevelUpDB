@@ -58,6 +58,8 @@ private:
     VolatileState vStateObj;
     
 public:
+    StateHelper();
+
     void Init();
 
     // Persistent - Term Vote
