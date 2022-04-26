@@ -15,6 +15,7 @@
 #include "raft.grpc.pb.h"
 #include "../util/locks.h"
 #include "../util/common.h"
+#include "../util/snapshot_helper.h"
 #include "../util/state_helper.h"
 #include "../util/levelDBWrapper.h"
 #include <csignal>
@@ -40,6 +41,7 @@ private:
   MutexMap _lockHelper;
   string _myIp;
 
+  SnapshotHelper _snapshot_helper;
   LevelDBWrapper _levelDBWrapper;
   int _hostCount;
   atomic<int> _votesGained;
@@ -65,6 +67,8 @@ private:
 
   void setNextIndexToLeaderLastIndex();
   void setMatchIndexToLeaderLastIndex();
+
+  void invokeInstallSnapshot(string followerIp);
 
   AppendEntriesRequest prepareRequestForAppendEntries(string followerip, int nextIndex);
 

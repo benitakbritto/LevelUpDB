@@ -567,7 +567,7 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
         if(request.term() - reply.term() >= MAX_TERM_DIFF_FOR_SNAPSHOT) 
         {
             dbgprintf("[DEBUG]: Sending snapshot to %s\n", followerIp);
-            // TODO: send installSnapshotRPC()
+            invokeInstallSnapshot(followerIp);
             return;
         }
 
@@ -793,6 +793,24 @@ void RaftServer::setAlarm(int after_ms) {
     return;
 }
 
+/* 
+*    @brief  sends InstallSnapshotRPC to followerIp 
+*  
+*   @param  followerIP
+*
+*/
+void RaftServer::invokeInstallSnapshot(string followerIp)
+{
+    auto stub = g_nodeList[followerIp].second.get();
+    InstallSnapshotRequest request;
+    InstallSnapshotReply reply;
+    ClientContext context;
+
+    // TODO: set key_value_pair in req
+    grpc::Status status = stub->InstallSnapshot(&context, request, &reply);
+    
+    // TODO: retry on failure
+}
 /* 
 *    @brief   On receiving AppendEntries RPC,   
 *                   Case 1: Leader term < my term, reject the RPC
