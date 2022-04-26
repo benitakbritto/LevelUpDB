@@ -17,11 +17,11 @@ Clone and follow the commands mentioned [here](https://github.com/google/leveldb
 Clone and follow the commands mentioned [here](https://github.com/google/snappy).
  
 ### Folder structure
- |_src
-  |_third_party
-    |_leveldb
-    |_snappy
- |_storage
+ |_src  
+  |_third_party  
+    |_leveldb  
+    |_snappy  
+ |_storage  
   
 ### Build
 #### Main source code
