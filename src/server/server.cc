@@ -996,7 +996,17 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
     return grpc::Status::OK;
 }
 
+/* 
+*   @brief   Installs Snapshot on server
+*               
+*   @param context 
+*   @param request 
+*   @param response 
+*
+*   @return grpc Status
+*/
 grpc::Status RaftServer::InstallSnapshot(ServerContext* context, const InstallSnapshotRequest* request, InstallSnapshotReply* reply) {
+    // TODO: Install the snapshot onto node
     return grpc::Status::OK;
 }
 
