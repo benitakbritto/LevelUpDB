@@ -84,6 +84,7 @@ public:
 
   grpc::Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
   grpc::Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
+  grpc::Status InstallSnapshot(ServerContext* context, const InstallSnapshotRequest* request, InstallSnapshotReply* reply) override;
 
 };
 

@@ -24,7 +24,7 @@ enum ConsistencyLevel { STRONG_LEADER, STRONG_MAJORITY, EVENTUAL };
 #define FOLLOWER_STR                "FOLLOWER"
 #define RETRY_TIME_START             1                                     
 #define RETRY_TIME_MULTIPLIER        2                                    
-
+#define MAX_TERM_DIFF_FOR_SNAPSHOT   5
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/

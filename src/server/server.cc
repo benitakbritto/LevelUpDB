@@ -562,7 +562,15 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
             sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
 
         } while (status.error_code() == StatusCode::UNAVAILABLE && g_stateHelper.GetIdentity() == LEADER);
-              
+      
+        // Check if server should send snapshot instead
+        if(request.term() - reply.term() >= MAX_TERM_DIFF_FOR_SNAPSHOT) 
+        {
+            dbgprintf("[DEBUG]: Sending snapshot to %s\n", followerIp);
+            // TODO: send installSnapshotRPC()
+            return;
+        }
+
         // Check if RPC should be retried because of log inconsistencies
         shouldRetry = (request.term() >= reply.term() && !reply.success() && status.error_code() == StatusCode::OK);
         dbgprintf("[DEBUG] %s: reply.term() = %d | reply.success() = %d\n", __func__, reply.term(), reply.success());
@@ -985,6 +993,10 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
     reply->set_term(myCurrentTerm);
     reply->set_vote_granted_for(false);
     cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
+    return grpc::Status::OK;
+}
+
+grpc::Status RaftServer::InstallSnapshot(ServerContext* context, const InstallSnapshotRequest* request, InstallSnapshotReply* reply) {
     return grpc::Status::OK;
 }
 
