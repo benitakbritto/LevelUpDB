@@ -24,7 +24,7 @@ int StateHelper::GetCurrentTerm()
 */
 void StateHelper::AddVotedFor(int term, string ip)
 {
-    if (vTermVoteObj.HasNotVoted(term))
+    if (!vTermVoteObj.HasVoted(term))
     {
         pTermVoteObj.AddVotedFor(term, ip);
         vTermVoteObj.AddVotedFor(term, ip);

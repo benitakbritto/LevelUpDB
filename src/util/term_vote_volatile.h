@@ -34,7 +34,7 @@ public:
     int GetCurrentTerm();
     void AddVotedFor(int term, string ip);
     string GetVotedFor(int term);
-    bool HasNotVoted(int term);
+    bool HasVoted(int term);
 };
 
 #endif

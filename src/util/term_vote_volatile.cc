@@ -63,7 +63,7 @@ string VolatileTermVote::GetVotedFor(int term)
 *   @param  term
 *   @return  voted status
 */
-bool VolatileTermVote::HasNotVoted(int term)
+bool VolatileTermVote::HasVoted(int term)
 {
     return (votedFor.count(term) == 0) ? false : true;
 }

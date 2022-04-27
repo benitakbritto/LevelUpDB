@@ -413,7 +413,6 @@ void RaftServer::ClearAppendEntriesMap()
 */
 void RaftServer::runForElection() 
 {
-    int initialTerm = g_stateHelper.GetCurrentTerm();
     g_stateHelper.AddCurrentTerm(g_stateHelper.GetCurrentTerm() + 1);
 
     /* Vote for self - hence 1*/
@@ -721,8 +720,6 @@ void RaftServer::becomeFollower()
 void RaftServer::becomeCandidate() {
     g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
     dbgprintf("INFO] Become Candidate\n");
-    // resetElectionTimeout();
-    // setAlarm(_electionTimeout);
     runForElection();
 }
 
