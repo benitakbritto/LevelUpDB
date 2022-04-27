@@ -202,14 +202,14 @@ void LBNodeCommClient::SendHeartBeat()
     {
         request.set_identity(g_stateHelper.GetIdentity());
         stream->Write(request);
-        dbgprintf("INFO] SendHeartBeat: sent heartbeat\n");
+        // dbgprintf("INFO] SendHeartBeat: sent heartbeat\n");
 
         stream->Read(&reply);
-        dbgprintf("[INFO] SendHeartBeat: recv heartbeat response\n");
+        // dbgprintf("[INFO] SendHeartBeat: recv heartbeat response\n");
                 
         serverImpl.BuildSystemStateFromHBReply(reply);
 
-        dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
+        // dbgprintf("[INFO] SendHeartBeat: sleeping for 5 sec\n");
         sleep(HB_SLEEP_IN_SEC);
     }
 }
