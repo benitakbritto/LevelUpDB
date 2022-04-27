@@ -545,7 +545,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
     do 
     {
         request = prepareRequestForAppendEntries(followerIp, nextIndex);
-        dbgprintf("[DEBUG] %s: Checking if request is intact. Prev Log Term = %d\n", __func__, request.prev_log_term());
+        dbgprintf("[DEBUG] %s: Checking if request is intact. Leader IP = %d\n", __func__, request.leader_id().c_str());
         auto stub = g_nodeList[followerIp].second.get();
         // Retry RPC indefinitely if follower is down
         retryCount = 0;
