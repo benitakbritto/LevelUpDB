@@ -120,8 +120,6 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
 void RunKeyValueServer(char* args) 
 {
     string ip = string((char *) args);
-    dbgprintf("[DEBUG]: %s: ip = %s\n", __func__, ip.c_str());
-
     ip = convertToLocalAddress(ip);
 
     KeyValueOpsServiceImpl service;
@@ -135,7 +133,7 @@ void RunKeyValueServer(char* args)
     cout << "[INFO] KeyValue Server listening on "<< ip << endl;
     
     server->Wait();
-    return;
+    //return;
 }
 
 /******************************************************************************
@@ -257,7 +255,7 @@ void StartHB(char* args)
     lBNodeCommClient = new LBNodeCommClient(lb_addr); 
     lBNodeCommClient->SendHeartBeat();
 
-    return;
+    //return;
 }
 
 /******************************************************************************
@@ -975,20 +973,13 @@ int main(int argc, char **argv)
     // init
     g_stateHelper.SetIdentity(FOLLOWER);
     serverImpl.SetMyIp(argv[1]);
-
-    // pthread_t kv_server_t;
-    // pthread_t hb_t;
     
-    // pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
-    // pthread_create(&hb_t, NULL, StartHB, argv[2]);
+    std::thread(RunKeyValueServer, argv[1]).detach();
+    std::thread(StartHB, argv[2]).detach();
+    std::thread(RunServer, argv[1]).detach();
     
-    thread(StartHB, argv[2]);
-    thread(RunServer(argv[1]));
-    thread(RunKeyValueServer, argv[1]);
-    
-
-    // pthread_join(hb_t, NULL);
-    // pthread_join(kv_server_t, NULL);
-
+    // Keep this loop, so that the program doesn't return
+    while(1) {
+    }
     return 0;
 }
