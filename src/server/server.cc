@@ -553,7 +553,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
             reply.Clear();            
             
             status = stub->AppendEntries(&context, request, &reply);
-            cout << "[DEBUG] "<< __func__ <<" status code = ", status.error_code() << " | IP = " << followerIp <<endl;;
+            cout << "[DEBUG] "<< __func__ <<" status code = " << status.error_code() << " | IP = " << followerIp <<endl;
             retryCount++;
             sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
 
