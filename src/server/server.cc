@@ -388,7 +388,7 @@ bool RaftServer::ReceivedMajority()
         return true;
     }
 
-    int countSuccess = 0;
+    int countSuccess = 1;
     
     for (auto& it: _appendEntriesResponseMap) {
         AppendEntriesReply replyReceived = it.second;
@@ -493,7 +493,7 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
     request.set_prev_log_term(prevLogTerm);
     request.set_leader_commit_index(g_stateHelper.GetCommitIndex());
 
-    for(int i = nextIndex + 1; i < logLength; i++) 
+    for(int i = nextIndex; i < logLength; i++) 
     {
         int term = g_stateHelper.GetTermAtIndex(i);
         string key = g_stateHelper.GetKeyAtIndex(i);
@@ -687,13 +687,14 @@ void RaftServer::invokePeriodicAppendEntries()
 /*
 *   @brief sets nextIndex to last index on leader's log
 */ 
+// TODO: Change function name to Leader Log length
 void RaftServer::setNextIndexToLeaderLastIndex() 
 {
     int leaderLastIndex = g_stateHelper.GetLogLength() - 1;
 
     for(auto& node: g_nodeList) 
     {
-        g_stateHelper.SetNextIndex(node.first, leaderLastIndex);
+        g_stateHelper.SetNextIndex(node.first, leaderLastIndex + 1);
         dbgprintf("[DEBUG] Next index: IP = %s | Index = %d\n", node.first.c_str(), leaderLastIndex);
     }
 }
