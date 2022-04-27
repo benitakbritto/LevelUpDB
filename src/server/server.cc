@@ -340,24 +340,17 @@ void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply)
         {
             if(g_stateHelper.GetIdentity() == LEADER)
             {
-                int leaderLastIndex = g_stateHelper.GetLogLength();
-                g_stateHelper.SetNextIndex(nodeData.ip(), leaderLastIndex);
+                int leaderLastIndex = g_stateHelper.GetLogLength() - 1;
+                g_stateHelper.SetNextIndex(nodeData.ip(), leaderLastIndex + 1);
                 g_stateHelper.SetMatchIndex(nodeData.ip(), leaderLastIndex);
             }
 
             g_nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
                                             Raft::NewStub(grpc::CreateChannel(nodeData.ip(), grpc::InsecureChannelCredentials())));
-   
-        if(g_stateHelper.GetIdentity() == LEADER)
-        {
-            int leaderLastIndex = g_stateHelper.GetLogLength();
-            g_stateHelper.SetNextIndex(nodeData.ip(), leaderLastIndex);
-            g_stateHelper.SetMatchIndex(nodeData.ip(), leaderLastIndex);
         }
         else
         {
             g_nodeList[nodeData.ip()].first = nodeData.identity();
-        }
         }
     }
 }
