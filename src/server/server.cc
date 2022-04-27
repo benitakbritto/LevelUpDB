@@ -117,7 +117,7 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
     return grpc::Status::OK;
 }
 
-void *RunKeyValueServer(void* args) 
+void RunKeyValueServer(char* args) 
 {
     string ip = string((char *) args);
     dbgprintf("[DEBUG]: %s: ip = %s\n", __func__, ip.c_str());
@@ -135,7 +135,7 @@ void *RunKeyValueServer(void* args)
     cout << "[INFO] KeyValue Server listening on "<< ip << endl;
     
     server->Wait();
-    return NULL;
+    return;
 }
 
 /******************************************************************************
@@ -250,14 +250,14 @@ void LBNodeCommClient::InvokeAssertLeadership()
 *
 *   @param args to be used as lb address 
 */
-void *StartHB(void* args) 
+void StartHB(char* args) 
 {
     string lb_addr = string((char *) args);
     dbgprintf("[DEBUG] lb_addr = %s\n", lb_addr.c_str());
     lBNodeCommClient = new LBNodeCommClient(lb_addr); 
     lBNodeCommClient->SendHeartBeat();
 
-    return NULL;
+    return;
 }
 
 /******************************************************************************
@@ -976,16 +976,19 @@ int main(int argc, char **argv)
     g_stateHelper.SetIdentity(FOLLOWER);
     serverImpl.SetMyIp(argv[1]);
 
-    pthread_t kv_server_t;
-    pthread_t hb_t;
+    // pthread_t kv_server_t;
+    // pthread_t hb_t;
     
-    pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
-    pthread_create(&hb_t, NULL, StartHB, argv[2]);
+    // pthread_create(&kv_server_t, NULL, RunKeyValueServer, argv[1]);
+    // pthread_create(&hb_t, NULL, StartHB, argv[2]);
     
-    RunServer(argv[1]);
+    thread(StartHB, argv[2]);
+    thread(RunServer(argv[1]));
+    thread(RunKeyValueServer, argv[1]);
+    
 
-    pthread_join(hb_t, NULL);
-    pthread_join(kv_server_t, NULL);
+    // pthread_join(hb_t, NULL);
+    // pthread_join(kv_server_t, NULL);
 
     return 0;
 }
