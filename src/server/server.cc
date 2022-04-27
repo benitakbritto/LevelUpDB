@@ -295,6 +295,7 @@ void RaftServer::ServerInit()
 {    
     dbgprintf("[DEBUG]: %s: Inside function\n", __func__);
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);    
+   
     
     int old_errno = errno;
     errno = 0;
@@ -310,7 +311,7 @@ void RaftServer::ServerInit()
     signalHandlerService = this;
 
     errno = old_errno;
-    srand(time(NULL));
+    srand(getpid());
     resetElectionTimeout();
     setAlarm(_electionTimeout);
 
@@ -447,10 +448,14 @@ void RaftServer::runForElection()
 */       
 void RaftServer::invokeRequestVote(string nodeIp) {
 
-    cout<<"[INFO]: Sending Request Vote to "<<nodeIp<<endl;
+    cout<<"[INFO]: Sending Request Vote to "<<nodeIp<<" | term = "<<g_stateHelper.GetCurrentTerm()<<endl;
     if(g_nodeList[nodeIp].second.get()==nullptr)
     {
-       g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(nodeIp, grpc::InsecureChannelCredentials()));
+       if (g_stateHelper.GetIdentity() == CANDIDATE) g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(nodeIp, grpc::InsecureChannelCredentials()));
+       else
+       {
+	   return; // try	
+       }
     }
 
     if(requestVote(g_nodeList[nodeIp].second.get()))
@@ -595,13 +600,14 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 
     grpc::Status status = stub->ReqVote(&context, req, &reply);
 
-    resetElectionTimeout();
-    setAlarm(_electionTimeout);
+    // byeee
+   // resetElectionTimeout();
+    //setAlarm(_electionTimeout);
 
     if(status.ok() && reply.votegrantedfor())
         return true;
     
-    if(status.ok() && reply.term()>g_stateHelper.GetCurrentTerm())
+    if(status.ok() && reply.term() > g_stateHelper.GetCurrentTerm())
     {
         g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
     }
@@ -737,6 +743,7 @@ void RaftServer::AlarmCallback() {
 void RaftServer::resetElectionTimeout() {
     _electionTimeout = _minElectionTimeout + (rand() % 
         (_maxElectionTimeout - _minElectionTimeout + 1));
+	cout << _electionTimeout << " time " << endl;
 }
 
 /* 
@@ -780,10 +787,9 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
                                             AppendEntriesReply *reply)
 {
     dbgprintf("[DEBUG]: AppendEntries - Entering RPC\n");
+    cout << "Append Entries RPC" << endl;
     int my_term = 0;
 
-    resetElectionTimeout();
-    setAlarm(_electionTimeout);
 
     // Case 1: leader term < my term
     my_term = g_stateHelper.GetCurrentTerm();
@@ -798,6 +804,8 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
     // Case 2: Candidate receives valid AppendEntries RPC
     else 
     {
+	resetElectionTimeout();
+    	setAlarm(_electionTimeout);
         if (g_stateHelper.GetIdentity() == ServerIdentity::CANDIDATE)
         {
             dbgprintf("[DEBUG]: AppendEntries RPC - Candidate received a valid AppendEntriesRPC, becoming follower\n");
@@ -900,7 +908,8 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
     if(request->term() > g_stateHelper.GetCurrentTerm())
     {
         g_stateHelper.AddCurrentTerm(request->term());
-        becomeFollower();
+        reply->set_term(g_stateHelper.GetCurrentTerm());
+	becomeFollower();
     }
 
     // Case 3
@@ -909,10 +918,12 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
         if(request->lastlogterm() > g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength() - 1))
         {
             cout<<"[ELECTION] Granted Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<" Reason: Case A"<<endl;
-
-            g_stateHelper.AddVotedFor(request->term(), request->candidateid());
-            reply->set_votegrantedfor(true);
-
+	
+	    if(g_stateHelper.GetVotedFor(request->term())=="" || g_stateHelper.GetVotedFor(request->term()) == request->candidateid())
+	    {
+		g_stateHelper.AddVotedFor(request->term(), request->candidateid());
+            	reply->set_votegrantedfor(true);
+	    }
             return grpc::Status::OK;
         }
 
@@ -921,9 +932,11 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
             if(request->lastlogindex() >= g_stateHelper.GetLogLength()-1)
             {
                 cout<<"[ELECTION] Granted Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<" Reason: Case B"<<endl;
-                g_stateHelper.AddVotedFor(request->term(), request->candidateid());
-                reply->set_votegrantedfor(true);
-
+		if(g_stateHelper.GetVotedFor(request->term())=="" || g_stateHelper.GetVotedFor(request->term()) == request->candidateid())
+		{
+                    g_stateHelper.AddVotedFor(request->term(), request->candidateid());
+                    reply->set_votegrantedfor(true);
+		}
                 return grpc::Status::OK;
             }
         }

@@ -28,7 +28,7 @@ using kvstore::PutReply;
 
 int main(int argc, char** argv) 
 {
-    string target_str = "0.0.0.0:50052"; // LoadBalancer - acting as server for client
+    string target_str = "0.0.0.0:50051"; // LoadBalancer - acting as server for client
     KeyValueClient* keyValueClient = new KeyValueClient(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
     PutRequest putRequest;
     PutReply putReply;
