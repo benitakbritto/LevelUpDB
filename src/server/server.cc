@@ -796,12 +796,12 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
     cout << "Append Entries RPC" << endl;
     int my_term = 0;
 
-
     // Case 1: leader term < my term
     my_term = g_stateHelper.GetCurrentTerm();
     if (request->term() < my_term)
     {
-        dbgprintf("[DEBUG]: AppendEntries RPC - leader term < my term\n");
+        // dbgprintf("[DEBUG]: AppendEntries RPC - leader term < my term\n");
+        cout << "[APPEND ENTRIES]: Rejected - term is behind" << endl;
         reply->set_term(my_term);
         reply->set_success(false);
         return grpc::Status::OK;
@@ -810,26 +810,28 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
     // Case 2: Candidate receives valid AppendEntries RPC
     else 
     {
-	resetElectionTimeout();
+	    resetElectionTimeout();
     	setAlarm(_electionTimeout);
         if (g_stateHelper.GetIdentity() == ServerIdentity::CANDIDATE)
         {
-            dbgprintf("[DEBUG]: AppendEntries RPC - Candidate received a valid AppendEntriesRPC, becoming follower\n");
+            cout << "[APPEND ENTRIES]: Candidate becomes Follower" << endl;
+            // dbgprintf("[DEBUG]: AppendEntries RPC - Candidate received a valid AppendEntriesRPC, becoming follower\n");
             becomeFollower();
         }
 
         // Check if term at log index matches
         if (g_stateHelper.GetTermAtIndex(request->prev_log_index()) != request->prev_log_term())
         {
-            dbgprintf("[DEBUG]: AppendEntries RPC - term mismatch at log index\n");
+            cout << "[APPEND ENTRIES]: Log inconsistent, AppendEntries will be retried" << endl;
+            // dbgprintf("[DEBUG]: AppendEntries RPC - term mismatch at log index\n");
             reply->set_term(my_term);
             reply->set_success(false);
             return grpc::Status::OK;
         } 
         else 
         {   
-            dbgprintf("[DEBUG]: AppendEntries RPC - No log inconsistencies\n");
-            
+            cout << "[APPEND ENTRIES]: Log consistent, adding entries if any" << endl;
+            // dbgprintf("[DEBUG]: AppendEntries RPC - No log inconsistencies\n");
             // Apply entries to log
             vector<Entry> entries;
             for (int i = 0; i < request->log_entry_size(); i++) 
