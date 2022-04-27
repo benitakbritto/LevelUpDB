@@ -17,11 +17,11 @@ Clone and follow the commands mentioned [here](https://github.com/google/leveldb
 Clone and follow the commands mentioned [here](https://github.com/google/snappy).
  
 ### Folder structure
- |_src  
-  |_third_party  
-    |_leveldb  
-    |_snappy  
- |_storage  
+|_src  
+|____third_party  
+|_______________leveldb  
+|_______________snappy  
+|_storage  
   
 ### Build
 #### Main source code
@@ -33,7 +33,7 @@ Clone and follow the commands mentioned [here](https://github.com/google/snappy)
 ```
 ./loadbalancer <ip with port for client to connect> <ip with port for servers to send heartbeat>
 ./server <my ip with port>  <lb ip with port>
-./keyvalue_client
+./keyvalue_client <ip of lb with port>
 ```
 
 

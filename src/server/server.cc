@@ -36,7 +36,7 @@
 #include "../util/common.h"
 #include "../util/state_helper.h"
 #include "raft_server.h"
-#include "../util/levelDBWrapper.h" // TODO: Build failing
+#include "../util/levelDBWrapper.h"
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -73,6 +73,12 @@ void PrintNodesInNodeList()
     {
         dbgprintf("[DEBUG]: ip = %s| identity = %d\n", item.first.c_str(), item.second.first);
     }
+}
+
+string convertToLocalAddress(string addr) 
+{
+  int colon = addr.find(":");
+  return "0.0.0.0:" + addr.substr(colon+1); 
 }
 
 /******************************************************************************
@@ -113,6 +119,8 @@ void *RunKeyValueServer(void* args)
 {
     string ip = string((char *) args);
     dbgprintf("[DEBUG]: %s: ip = %s\n", __func__, ip.c_str());
+
+    ip = convertToLocalAddress(ip);
 
     KeyValueOpsServiceImpl service;
     grpc::EnableDefaultHealthCheckService(true);
@@ -290,7 +298,6 @@ void signalHandler(int signum) {
 *          resets election timeout with a random time duration,
 *          prepares to trigger alarm at the end of election timeout
 */
-
 void RaftServer::ServerInit() 
 {    
     dbgprintf("[DEBUG]: %s: Inside function\n", __func__);
@@ -943,13 +950,12 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
     return grpc::Status::OK;
 }
 
-void RunServer(string my_ip) {
+void RunServer(string ip) {
+    ip = convertToLocalAddress(ip);
     ServerBuilder builder;
-    builder.AddListeningPort(serverImpl.GetMyIp(), grpc::InsecureServerCredentials());
+    builder.AddListeningPort(ip, grpc::InsecureServerCredentials());
     builder.RegisterService(&serverImpl);
     unique_ptr<Server> server(builder.BuildAndStart());
-	dbgprintf("[INFO] Server is live\n");
-
     serverImpl.ServerInit();
     server->Wait();
 }
