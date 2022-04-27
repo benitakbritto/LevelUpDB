@@ -457,10 +457,13 @@ void RaftServer::invokeRequestVote(string nodeIp) {
     cout<<"[INFO]: Sending Request Vote to "<<nodeIp<<" | term = "<<g_stateHelper.GetCurrentTerm()<<endl;
     if(g_nodeList[nodeIp].second.get()==nullptr)
     {
-       if (g_stateHelper.GetIdentity() == CANDIDATE) g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(nodeIp, grpc::InsecureChannelCredentials()));
+       if (g_stateHelper.GetIdentity() == CANDIDATE)
+       { 
+           g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(nodeIp, grpc::InsecureChannelCredentials()));
+       }
        else
        {
-	   return; // try	
+	        return; // try	
        }
     }
 
@@ -550,7 +553,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
             reply.Clear();            
             
             status = stub->AppendEntries(&context, request, &reply);
-            dbgprintf("[DEBUG]:  status code = %d\n", status.error_code());
+            cout << "[DEBUG] "<< __func__ <<" status code = ", status.error_code() << " | IP = " << followerIp <<endl;;
             retryCount++;
             sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
 
@@ -601,14 +604,13 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 
     ReqVoteReply reply;
     ClientContext context;
-    context.set_deadline(chrono::system_clock::now() + 
-        chrono::milliseconds(_heartbeatInterval));
+    
+    // TODO: Not needed?
+    // context.set_deadline(chrono::system_clock::now() + 
+    //     chrono::milliseconds(_heartbeatInterval));
 
     grpc::Status status = stub->ReqVote(&context, req, &reply);
-
-    // byeee
-   // resetElectionTimeout();
-    //setAlarm(_electionTimeout);
+    cout << "[DEBUG] " << __func__ << " status code = " << status.error_code() << endl;
 
     if(status.ok() && reply.votegrantedfor())
         return true;

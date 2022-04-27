@@ -13,7 +13,8 @@ PersistentTermVote::PersistentTermVote()
 	    throw runtime_error("[ERROR]: Could not create log file");
     }
 
-    dbgprintf("[INFO]: Init logging at: %s\n", file_path.c_str());
+    // dbgprintf("[INFO]: Init logging at: %s\n", file_path.c_str());
+    cout << "[INFO]: Logging at: " << file_path << endl;
 }
 
 /*

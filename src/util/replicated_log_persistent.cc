@@ -19,7 +19,8 @@ PersistentReplicatedLog::PersistentReplicatedLog()
 	    throw runtime_error("[ERROR]: Could not create log file");
     }
 
-    dbgprintf("[INFO]: Init logging at: %s\n", log_file_path.c_str());
+    // dbgprintf("[INFO]: Logging at: %s\n", log_file_path.c_str());
+    cout << "[INFO]: Logging at: " << log_file_path << endl;
 }
 
 /*
