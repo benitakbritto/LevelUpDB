@@ -28,24 +28,28 @@ using kvstore::PutReply;
 // @usage: ./keyvalue_client <ip of lb with port>
 int main(int argc, char** argv) 
 {
-    string target_str = string(argv[1]); // LoadBalancer - acting as server for client
+    string target_str = string(argv[1]);
     KeyValueClient* keyValueClient = new KeyValueClient(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
+    
+    // Test Put
     PutRequest putRequest;
     PutReply putReply;
 
     putRequest.set_key("k1");
     putRequest.set_value("v1");
 
-    GetRequest getRequest;
-    GetReply getReply;
-    getRequest.set_key("k1");
-    getRequest.set_consistency_level(0);
+    Status putStatus = keyValueClient->PutToDB(putRequest, &putReply);
+    cout << putStatus.error_code() << endl;
 
-    dbgprintf("[DEBUG] Client contacting LB\n");
-    // Status putStatus = keyValueClient->PutToDB(putRequest, &putReply);
-    // cout << putStatus.error_code() << endl;
-     
-    Status getStatus = keyValueClient->GetFromDB(getRequest, &getReply);
-    cout << getStatus.error_code() << endl;
+    // Test Get
+    // GetRequest getRequest;
+    // GetReply getReply;
+
+    // getRequest.set_key("k1");
+    // getRequest.set_consistency_level(0);
+
+    // Status getStatus = keyValueClient->GetFromDB(getRequest, &getReply);
+    // cout << getStatus.error_code() << endl;
+
     return 0;
 }
