@@ -485,7 +485,6 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
     dbgprintf("[DEBUG] %s: Entering function with nextIndex = %d\n", __func__, nextIndex);
     AppendEntriesRequest request;
 
-    int retryCount = 0;
     int logLength = g_stateHelper.GetLogLength();
     int prevLogIndex = g_stateHelper.GetMatchIndex(followerip);
     int prevLogTerm = g_stateHelper.GetTermAtIndex(prevLogIndex);
@@ -503,11 +502,12 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
         string value = g_stateHelper.GetValueAtIndex(i);
 
         auto data = request.add_log_entry();
-
         data->set_term(term); 
         data->set_key(key); 
         data->set_value(value);
     }
+
+    dbgprintf("[DEBUG] %s: logLength = %d | prevLogIndex = %d | prevLogTerm = %d | nextIndex = %d | Entries size = %d \n", __func__, logLength, prevLogIndex, prevLogTerm, nextIndex, request.log_entry_size());
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
     return request;
@@ -545,6 +545,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
     do 
     {
         request = prepareRequestForAppendEntries(followerIp, nextIndex);
+        dbgprintf("[DEBUG] %s: Checking if request is intact. Prev Log Term = %d\n", __func__, request.prev_log_term());
         auto stub = g_nodeList[followerIp].second.get();
         // Retry RPC indefinitely if follower is down
         retryCount = 0;
@@ -631,13 +632,10 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 void RaftServer::BroadcastAppendEntries() 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-    dbgprintf("[DEBUG] %s: _nodeList.size() = %ld\n", __func__, g_nodeList.size());
     for (auto& node: g_nodeList) 
     {
-        dbgprintf("[DEBUG]: ip of node %s \n", node.first.c_str());
         if (node.first != _myIp) 
         {
-            dbgprintf("[DEBUG]: going to call invokeAppendEntries\n");
             thread(&RaftServer::invokeAppendEntries, this, node.first).detach();
         }
     }
@@ -693,11 +691,12 @@ void RaftServer::invokePeriodicAppendEntries()
 */ 
 void RaftServer::setNextIndexToLeaderLastIndex() 
 {
-    int leaderLastIndex = g_stateHelper.GetLogLength();
+    int leaderLastIndex = g_stateHelper.GetLogLength() - 1
 
     for(auto& node: g_nodeList) 
     {
         g_stateHelper.SetNextIndex(node.first, leaderLastIndex);
+        dbgprintf("[DEBUG] Next index: IP = %s | Index = %d\n", node.first.c_str(), leaderLastIndex);
     }
 }
 
@@ -706,11 +705,12 @@ void RaftServer::setNextIndexToLeaderLastIndex()
 */ 
 void RaftServer::setMatchIndexToLeaderLastIndex() 
 {
-    int leaderLastIndex = g_stateHelper.GetLogLength();
+    int leaderLastIndex = g_stateHelper.GetLogLength() - 1;
     
     for(auto& node: g_nodeList) 
     {
         g_stateHelper.SetMatchIndex(node.first, leaderLastIndex);
+        dbgprintf("[DEBUG] Match index: IP = %s | Index = %d\n", node.first.c_str(), leaderLastIndex);
     }
 }
 
