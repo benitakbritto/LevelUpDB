@@ -691,7 +691,7 @@ void RaftServer::invokePeriodicAppendEntries()
 */ 
 void RaftServer::setNextIndexToLeaderLastIndex() 
 {
-    int leaderLastIndex = g_stateHelper.GetLogLength() - 1
+    int leaderLastIndex = g_stateHelper.GetLogLength() - 1;
 
     for(auto& node: g_nodeList) 
     {
