@@ -545,7 +545,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
     do 
     {
         request = prepareRequestForAppendEntries(followerIp, nextIndex);
-        dbgprintf("[DEBUG] %s: Checking if request is intact. Leader IP = %d\n", __func__, request.leader_id().c_str());
+        dbgprintf("[DEBUG] %s: Checking if request is intact. Leader IP = %s\n", __func__, request.leader_id().c_str());
         auto stub = g_nodeList[followerIp].second.get();
         // Retry RPC indefinitely if follower is down
         retryCount = 0;
@@ -562,7 +562,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
         } while (status.error_code() == StatusCode::UNAVAILABLE && g_stateHelper.GetIdentity() == LEADER);
               
         // Check if RPC should be retried because of log inconsistencies
-        shouldRetry = (request.term() >= reply.term() && !reply.success());
+        shouldRetry = (request.term() >= reply.term() && !reply.success() && status.error_code() == StatusCode::OK);
         dbgprintf("[DEBUG] %s: reply.term() = %d | reply.success() = %d\n", __func__, reply.term(), reply.success());
         dbgprintf("[DEBUG] %s: shouldRetry = %d\n", __func__, shouldRetry);
         // AppendEntries failed because of log inconsistencies
