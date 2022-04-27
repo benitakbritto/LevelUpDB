@@ -87,6 +87,7 @@ string convertToLocalAddress(string addr)
 // TODO: use leveldb
 grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply)  
 {
+    cout << "[INFO] Received Get request" << endl;
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
     return grpc::Status::OK;
@@ -94,6 +95,7 @@ grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const Get
 
 grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply)  
 {
+    cout << "[INFO] Received Put request" << endl;
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
 
     serverImpl.ClearAppendEntriesMap();
@@ -494,8 +496,7 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
     request.set_prev_log_term(prevLogTerm);
     request.set_leader_commit_index(g_stateHelper.GetCommitIndex());
 
-    // TODO: Improve efficiency
-    for(int i = nextIndex; i < logLength; i++) 
+    for(int i = nextIndex + 1; i < logLength; i++) 
     {
         int term = g_stateHelper.GetTermAtIndex(i);
         string key = g_stateHelper.GetKeyAtIndex(i);
@@ -810,8 +811,10 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
     // Case 2: Candidate receives valid AppendEntries RPC
     else 
     {
+        // valid RPC
 	    resetElectionTimeout();
     	setAlarm(_electionTimeout);
+
         if (g_stateHelper.GetIdentity() == ServerIdentity::CANDIDATE)
         {
             cout << "[APPEND ENTRIES]: Candidate becomes Follower" << endl;
