@@ -118,7 +118,7 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
     return grpc::Status::OK;
 }
 
-void* RunKeyValueServer(char* args) 
+void* RunKeyValueServer(void* args) 
 {
     string ip = string((char *) args);
     ip = convertToLocalAddress(ip);
@@ -134,8 +134,8 @@ void* RunKeyValueServer(char* args)
     cout << "[INFO] KeyValue Server listening on "<< ip << endl;
     
     server->Wait();
-    return;
-    dbgprintf("RunKeyValueServer thread exiting \n");
+    return NULL;
+    //dbgprintf("RunKeyValueServer thread exiting \n");
 }
 
 /******************************************************************************
@@ -251,14 +251,14 @@ void LBNodeCommClient::InvokeAssertLeadership()
 *
 *   @param args to be used as lb address 
 */
-void* StartHB(char* args) 
+void* StartHB(void* args) 
 {
     string lb_addr = string((char *) args);
     dbgprintf("[DEBUG] lb_addr = %s\n", lb_addr.c_str());
     lBNodeCommClient = new LBNodeCommClient(lb_addr); 
     lBNodeCommClient->SendHeartBeat();
 
-    return;
+    return NULL;
 }
 
 /******************************************************************************
@@ -999,9 +999,9 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
     return grpc::Status::OK;
 }
 
-void* RunServer(string _ip) 
+void* RunServer(void* _ip) 
 {
-    string ip = convertToLocalAddress((char *) _ip);
+    string ip = convertToLocalAddress(string((char *) _ip));
     dbgprintf("[DEBUG] %s: IP = %s\n", __func__, ip.c_str());
     ServerBuilder builder;
     builder.AddListeningPort(ip, grpc::InsecureServerCredentials());
@@ -1009,6 +1009,7 @@ void* RunServer(string _ip)
     unique_ptr<Server> server(builder.BuildAndStart());
     serverImpl.ServerInit();
     server->Wait();
+    return NULL;
 }
 
 /*
