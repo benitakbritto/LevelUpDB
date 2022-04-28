@@ -85,7 +85,7 @@ string convertToLocalAddress(string addr)
  * DECLARATION: KeyValueOpsServiceImpl
  *****************************************************************************/
 // TODO: use leveldb
-grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override
+grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) 
 {
     cout << "[INFO] Received Get request" << endl;
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -93,7 +93,7 @@ grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const Get
     return grpc::Status::OK;
 }
 
-grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override 
+grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply)  
 {
     cout << "[INFO] Received Put request" << endl;
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -336,7 +336,7 @@ void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply)
     for (int i = 0; i < reply.node_data_size(); i++)
     {
         auto nodeData = reply.node_data(i);
-        dbgprintf("[DEBUG] nodeData.ip(): %s \n", nodeData.ip());
+        dbgprintf("[DEBUG] nodeData.ip(): %s \n", nodeData.ip().c_str());
 
         if(g_nodeList.count(nodeData.ip()) == 0)
         {
@@ -786,7 +786,7 @@ void RaftServer::setAlarm(int after_ms) {
 */
 grpc::Status RaftServer::AppendEntries(ServerContext* context, 
                                             const AppendEntriesRequest* request, 
-                                            AppendEntriesReply *reply) override
+                                            AppendEntriesReply *reply)
 {
     dbgprintf("[DEBUG]: AppendEntries - Entering RPC\n");
     cout << "Append Entries RPC" << endl;
@@ -896,7 +896,7 @@ void RaftServer::ExecuteCommands(int start, int end)
 *   @return grpc Status
 *
 */
-grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override
+grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) 
 {
     cout<<"[ELECTION] Received Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<endl;
 

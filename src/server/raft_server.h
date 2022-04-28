@@ -84,8 +84,8 @@ public:
   void ExecuteCommands(int start, int end);
   void BuildSystemStateFromHBReply(HeartBeatReply reply);
 
-  grpc::Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply);
-  grpc::Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply);
+  grpc::Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
+  grpc::Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
 
 };
 
