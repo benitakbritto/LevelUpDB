@@ -82,6 +82,23 @@ string convertToLocalAddress(string addr)
   return "0.0.0.0:" + addr.substr(colon+1); 
 }
 
+string addToPort(string addr) 
+{
+  int colon = addr.find(":");
+  int port  = stoi(addr.substr(colon+1)) + 1;
+  return "0.0.0.0:" + to_string(port); 
+}
+
+
+string getRaftIp(string kvServerIp)
+{
+    int colon = kvServerIp.find(":");
+    int port  = stoi(kvServerIp.substr(colon+1)) + 1;
+    string raftIp = kvServerIp.substr(0,colon + 1) + to_string(port);
+    dbgprintf("%s\n", raftIp.c_str());
+    return  raftIp;
+}
+
 /******************************************************************************
  * DECLARATION: KeyValueOpsServiceImpl
  *****************************************************************************/
@@ -118,9 +135,9 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
     return grpc::Status::OK;
 }
 
-void* RunKeyValueServer(void* args) 
+void RunKeyValueServer(string args) 
 {
-    string ip = string((char *) args);
+    string ip = string(args);
     ip = convertToLocalAddress(ip);
 
     KeyValueOpsServiceImpl service;
@@ -134,8 +151,6 @@ void* RunKeyValueServer(void* args)
     cout << "[INFO] KeyValue Server listening on "<< ip << endl;
     
     server->Wait();
-    return NULL;
-    //dbgprintf("RunKeyValueServer thread exiting \n");
 }
 
 /******************************************************************************
@@ -251,14 +266,12 @@ void LBNodeCommClient::InvokeAssertLeadership()
 *
 *   @param args to be used as lb address 
 */
-void* StartHB(void* args) 
+void StartHB(string args) 
 {
-    string lb_addr = string((char *) args);
+    string lb_addr = string(args);
     dbgprintf("[DEBUG] lb_addr = %s\n", lb_addr.c_str());
     lBNodeCommClient = new LBNodeCommClient(lb_addr); 
     lBNodeCommClient->SendHeartBeat();
-
-    return NULL;
 }
 
 /******************************************************************************
@@ -350,8 +363,9 @@ void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply)
                 g_stateHelper.SetMatchIndex(nodeData.ip(), leaderLastIndex);
             }
 
+
             g_nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
-                                            Raft::NewStub(grpc::CreateChannel(nodeData.ip(), grpc::InsecureChannelCredentials())));
+                                            Raft::NewStub(grpc::CreateChannel(getRaftIp(nodeData.ip()), grpc::InsecureChannelCredentials())));
         }
         else
         {
@@ -457,29 +471,25 @@ void RaftServer::runForElection()
 *
 *   @param nodeIp
 */       
-void RaftServer::invokeRequestVote(string nodeIp) {
+void RaftServer::invokeRequestVote(string nodeIp) 
+{
 
     cout << "[INFO]: Sending Request Vote to " << nodeIp << " | term = " << g_stateHelper.GetCurrentTerm() << endl;
-    // This will be set in HB
-    // if(g_nodeList[nodeIp].second.get()==nullptr)
-    // {
-    //    if (g_stateHelper.GetIdentity() == CANDIDATE)
-    //    { 
-    //        g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(nodeIp, grpc::InsecureChannelCredentials()));
-    //    }
-    //    else
-    //    {
-	//         return; // try	
-    //    }
-    // }
-
-    if (g_stateHelper.GetIdentity() == CANDIDATE)
+    if(g_nodeList[nodeIp].second.get()==nullptr)
     {
-        if(requestVote(g_nodeList[nodeIp].second.get()))
-        {
-            _votesGained++;
-            //dbgprintf("[DEBUG] %s: _votesGained for %s = %d\n", __func__, nodeIp.c_str(), _votesGained);
-        }
+       if (g_stateHelper.GetIdentity() == CANDIDATE)
+       { 
+            g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(getRaftIp(nodeIp), grpc::InsecureChannelCredentials()));
+       }
+       else
+       {
+	        return; // try	
+       }
+    }
+
+    if(g_stateHelper.GetIdentity() == CANDIDATE && requestVote(g_nodeList[nodeIp].second.get()))
+    {
+        _votesGained++;
     }
 }
 
@@ -621,12 +631,6 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
     
     grpc::Status status = stub->ReqVote(&context, req, &reply);
     cout << "[DEBUG] " << __func__ << " status code = " << status.error_code() << endl;
-    //dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
-    // TODO: Remove later
-    if (status.error_code() == 12)
-    {
-    	exit(-1);
-    }
 
     if(status.ok() && reply.vote_granted_for())
     {   
@@ -677,15 +681,14 @@ void RaftServer::becomeLeader()
 
     g_stateHelper.SetIdentity(ServerIdentity::LEADER);
 
-    // TODO: Uncomment later
-    // setNextIndexToLeaderLastIndex();
-    // setMatchIndexToLeaderLastIndex();
+    setNextIndexToLeaderLastIndex();
+    setMatchIndexToLeaderLastIndex();
 
-    // // inform LB
-    // lBNodeCommClient->InvokeAssertLeadership();
+    // inform LB
+    lBNodeCommClient->InvokeAssertLeadership();
 
-    // // to maintain leadership
-    // thread(&RaftServer::invokePeriodicAppendEntries, this).detach();
+    // to maintain leadership
+    thread(&RaftServer::invokePeriodicAppendEntries, this).detach();
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
@@ -999,55 +1002,34 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
     return grpc::Status::OK;
 }
 
-void* RunServer(void* _ip) 
-{
-    string ip = convertToLocalAddress(string((char *) _ip));
-    dbgprintf("[DEBUG] %s: IP = %s\n", __func__, ip.c_str());
+void RunRaftServer(string ip) {
+    ip = addToPort(ip);
+    dbgprintf("RunRaftServer listening on %s \n", ip.c_str());
     ServerBuilder builder;
     builder.AddListeningPort(ip, grpc::InsecureServerCredentials());
     builder.RegisterService(&serverImpl);
     unique_ptr<Server> server(builder.BuildAndStart());
     serverImpl.ServerInit();
     server->Wait();
-    return NULL;
 }
 
 /*
-*   @usage: ./server <my ip with port>  <lb ip with port>
+*   @usage: ./server <my ip with port>  <lb ip>
 */
 int main(int argc, char **argv) 
 {
     // init
-    pthread_t kv_server_t;
-    pthread_t hb_t;
-    pthread_t raft_t;
-    pthread_attr_t tattr;
-    int policy;
-    int ret;
-
-    /* set the scheduling policy to SCHED_OTHER */
-    ret = pthread_attr_setschedpolicy(&tattr, SCHED_RR);
-    cout << "[DEBUG] scheduler ret = " << ret << endl;
-
-
-    grpc::ResourceQuota requestQuotaObj;
-    requestQuotaObj.SetMaxThreads(1);
     g_stateHelper.SetIdentity(FOLLOWER);
     serverImpl.SetMyIp(argv[1]);
    
     // TODO: Uncomment later 
-    // std::thread(RunKeyValueServer, argv[1]).detach();
-    // std::thread(StartHB, argv[2]).detach();
-    // std::thread(RunServer, argv[1]).detach();
-    pthread_create(&kv_server_t, &tattr, RunKeyValueServer, argv[1]);
-    pthread_create(&hb_t, &tattr, StartHB, argv[2]);
-    pthread_create(&hb_t, &tattr, RunServer, argv[1]);
-    
+    std::thread(RunKeyValueServer, argv[1]).detach();
+    std::thread(StartHB, argv[2]).detach();
+    std::thread(RunRaftServer, argv[1]).detach();
+   
     // Keep this loop, so that the program doesn't return
-    // while(1) {
-    // }
-    pthread_join(hb_t, NULL);
-    pthread_join(kv_server_t, NULL);
-    pthread_join(raft_t, NULL);
+    while(1) {
+    }
+
     return 0;
 }
