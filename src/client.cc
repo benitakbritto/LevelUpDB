@@ -19,18 +19,12 @@ Status KeyValueClient::GetFromDB(const GetRequest request, GetReply* reply)
 
 Status KeyValueClient::PutToDB(PutRequest request, PutReply* reply)
 {
-    Status status;
-    int attempt = 0;
-    int backoff = 2;
     dbgprintf("Reached client\n");
-    do {
-        sleep(attempt * backoff);
-        // PutReply reply;
-        ClientContext context;
-        status = stub_->PutToDB(&context, request, reply);
-        dbgprintf("[DEBUG] %s: status = %d\n", __func__, status.error_code());
-        attempt++;
-    } while(attempt < 3 && status.error_code() != grpc::StatusCode::OK);
+    
+    Status status;
+    ClientContext context;
+    status = stub_->PutToDB(&context, request, reply);
+    dbgprintf("[DEBUG] %s: status = %d\n", __func__, status.error_code());
 
     return status;
 }
