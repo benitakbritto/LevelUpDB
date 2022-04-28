@@ -85,7 +85,8 @@ void StateHelper::Insert(int start_index, vector<Entry> &entries)
     int index = 0;
 
     index = start_index;
-    offset = vReplicatedLogObj.GetOffset(start_index);
+    offset = (index == GetLogLength()) ? pReplicatedLogObj.GetEndOfFileOffset() : vReplicatedLogObj.GetOffset(start_index);
+    
     if (offset == -1)
     {
         dbgprintf("[DEBUG]: Insert - offset == -1\n");
