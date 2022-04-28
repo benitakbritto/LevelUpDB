@@ -99,6 +99,7 @@ void StateHelper::Insert(int start_index, vector<Entry> &entries)
         return;
     }
     offset = vReplicatedLogObj.GetOffset(start_index);
+    dbgprintf("[DEBUG] %s: offset = %d\n", __func__, offset);
     
     if (offset == -1)
     {
@@ -121,6 +122,7 @@ void StateHelper::Insert(int start_index, vector<Entry> &entries)
         vReplicatedLogObj.Insert(index, val.term, val.key, val.value, offset);
         
         offset = pReplicatedLogObj.GetCurrentFileOffset();
+        dbgprintf("[DEBUG] %s: offset (in loop) = %d\n", __func__, offset);
         index += 1;
     }
 
