@@ -81,6 +81,23 @@ string convertToLocalAddress(string addr)
   return "0.0.0.0:" + addr.substr(colon+1); 
 }
 
+string addToPort(string addr) 
+{
+  int colon = addr.find(":");
+  int port  = stoi(addr.substr(colon+1)) + 1;
+  return "0.0.0.0:" + to_string(port); 
+}
+
+
+string getRaftIp(string kvServerIp)
+{
+    int colon = kvServerIp.find(":");
+    int port  = stoi(kvServerIp.substr(colon+1)) + 1;
+    string raftIp = kvServerIp.substr(0,colon + 1) + to_string(port);
+    dbgprintf("%s\n", raftIp.c_str());
+    return  raftIp;
+}
+
 /******************************************************************************
  * DECLARATION: KeyValueOpsServiceImpl
  *****************************************************************************/
@@ -349,8 +366,9 @@ void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply)
                 g_stateHelper.SetMatchIndex(nodeData.ip(), leaderLastIndex);
             }
 
+
             g_nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
-                                            Raft::NewStub(grpc::CreateChannel(nodeData.ip(), grpc::InsecureChannelCredentials())));
+                                            Raft::NewStub(grpc::CreateChannel(getRaftIp(nodeData.ip()), grpc::InsecureChannelCredentials())));
         }
         else
         {
@@ -456,7 +474,8 @@ void RaftServer::invokeRequestVote(string nodeIp) {
     {
        if (g_stateHelper.GetIdentity() == CANDIDATE)
        { 
-           g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(nodeIp, grpc::InsecureChannelCredentials()));
+           dbgprintf("Creating stub to raft of other node\n");
+           g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(getRaftIp(nodeIp), grpc::InsecureChannelCredentials()));
        }
        else
        {
@@ -957,7 +976,8 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
 }
 
 void RunServer(string ip) {
-    ip = convertToLocalAddress(ip);
+    ip = addToPort(ip);
+    dbgprintf("RunServer listening on %s \n", ip.c_str());
     ServerBuilder builder;
     builder.AddListeningPort(ip, grpc::InsecureServerCredentials());
     builder.RegisterService(&serverImpl);
@@ -967,7 +987,7 @@ void RunServer(string ip) {
 }
 
 /*
-*   @usage: ./server <my ip with port>  <lb ip with port>
+*   @usage: ./server <my ip with port>  <lb ip>
 */
 int main(int argc, char **argv) 
 {
@@ -982,5 +1002,6 @@ int main(int argc, char **argv)
     // Keep this loop, so that the program doesn't return
     while(1) {
     }
+
     return 0;
 }
