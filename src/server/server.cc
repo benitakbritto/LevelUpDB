@@ -118,7 +118,7 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
     return grpc::Status::OK;
 }
 
-void RunKeyValueServer(char* args) 
+void* RunKeyValueServer(char* args) 
 {
     string ip = string((char *) args);
     ip = convertToLocalAddress(ip);
@@ -134,7 +134,7 @@ void RunKeyValueServer(char* args)
     cout << "[INFO] KeyValue Server listening on "<< ip << endl;
     
     server->Wait();
-    //return;
+    return;
     dbgprintf("RunKeyValueServer thread exiting \n");
 }
 
@@ -251,14 +251,14 @@ void LBNodeCommClient::InvokeAssertLeadership()
 *
 *   @param args to be used as lb address 
 */
-void StartHB(char* args) 
+void* StartHB(char* args) 
 {
     string lb_addr = string((char *) args);
     dbgprintf("[DEBUG] lb_addr = %s\n", lb_addr.c_str());
     lBNodeCommClient = new LBNodeCommClient(lb_addr); 
     lBNodeCommClient->SendHeartBeat();
 
-    //return;
+    return;
 }
 
 /******************************************************************************
@@ -999,9 +999,9 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
     return grpc::Status::OK;
 }
 
-void RunServer(string ip) 
+void* RunServer(string _ip) 
 {
-    ip = convertToLocalAddress(ip);
+    string ip = convertToLocalAddress((char *) _ip);
     dbgprintf("[DEBUG] %s: IP = %s\n", __func__, ip.c_str());
     ServerBuilder builder;
     builder.AddListeningPort(ip, grpc::InsecureServerCredentials());
@@ -1017,18 +1017,36 @@ void RunServer(string ip)
 int main(int argc, char **argv) 
 {
     // init
+    pthread_t kv_server_t;
+    pthread_t hb_t;
+    pthread_t raft_t;
+    pthread_attr_t tattr;
+    int policy;
+    int ret;
+
+    /* set the scheduling policy to SCHED_OTHER */
+    ret = pthread_attr_setschedpolicy(&tattr, SCHED_RR);
+    cout << "[DEBUG] scheduler ret = " << ret << endl;
+
+
     grpc::ResourceQuota requestQuotaObj;
     requestQuotaObj.SetMaxThreads(1);
     g_stateHelper.SetIdentity(FOLLOWER);
     serverImpl.SetMyIp(argv[1]);
    
     // TODO: Uncomment later 
-    std::thread(RunKeyValueServer, argv[1]).detach();
-    std::thread(StartHB, argv[2]).detach();
-    std::thread(RunServer, argv[1]).detach();
+    // std::thread(RunKeyValueServer, argv[1]).detach();
+    // std::thread(StartHB, argv[2]).detach();
+    // std::thread(RunServer, argv[1]).detach();
+    pthread_create(&kv_server_t, &tattr, RunKeyValueServer, argv[1]);
+    pthread_create(&hb_t, &tattr, StartHB, argv[2]);
+    pthread_create(&hb_t, &tattr, RunServer, argv[1]);
     
     // Keep this loop, so that the program doesn't return
-    while(1) {
-    }
+    // while(1) {
+    // }
+    pthread_join(hb_t, NULL);
+    pthread_join(kv_server_t, NULL);
+    pthread_join(raft_t, NULL);
     return 0;
 }
