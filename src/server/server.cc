@@ -37,6 +37,7 @@
 #include "../util/state_helper.h"
 #include "raft_server.h"
 #include "../util/levelDBWrapper.h"
+#include <grpcpp/resource_quota.h>
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -433,9 +434,9 @@ void RaftServer::runForElection()
     for (auto& node: g_nodeList) {
         if (node.first != GetMyIp()) {
             
-	 //std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
+	 std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
         // TODO: try without threads
-	invokeRequestVote(node.first);
+	//invokeRequestVote(node.first);
 	}
     }
 
@@ -1016,11 +1017,13 @@ void RunServer(string ip)
 int main(int argc, char **argv) 
 {
     // init
+    grpc::ResourceQuota requestQuotaObj;
+    requestQuotaObj.SetMaxThreads(1);
     g_stateHelper.SetIdentity(FOLLOWER);
     serverImpl.SetMyIp(argv[1]);
    
     // TODO: Uncomment later 
-    //std::thread(RunKeyValueServer, argv[1]).detach();
+    std::thread(RunKeyValueServer, argv[1]).detach();
     std::thread(StartHB, argv[2]).detach();
     std::thread(RunServer, argv[1]).detach();
     
