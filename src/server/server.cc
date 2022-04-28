@@ -114,18 +114,19 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
 {
     cout << "[INFO] Received Put request" << endl;
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-
-    serverImpl.ClearAppendEntriesMap();
             
-    g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value());        
-    serverImpl.BroadcastAppendEntries();
+    g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value()); 
+
+    atomic<int> successCount;
+    successCount = 1;       
+    serverImpl.BroadcastAppendEntries(&successCount);
             
     // wait for majority
     do 
     {
         dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
         sleep(1);
-    } while(!serverImpl.ReceivedMajority());
+    } while(!serverImpl.ReceivedMajority(&successCount));
             
     g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1);
     serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
@@ -395,36 +396,15 @@ int RaftServer::GetMajorityCount()
 *       true : on receiving majority or if there is only one node in the cluster
 *       false: otherwise
 */
-bool RaftServer::ReceivedMajority() 
+bool RaftServer::ReceivedMajority(atomic<int>* successCount) 
 {
     // Leader is the only node alive
-    if (g_nodeList.size() == 1) 
+    if (g_nodeList.size() == 1 || *successCount > g_nodeList.size()/2) 
     {
         return true;
     }
 
-    int countSuccess = 1;
-    
-    for (auto& it: _appendEntriesResponseMap) {
-        AppendEntriesReply replyReceived = it.second;
-        if(replyReceived.success()) 
-        {
-            countSuccess++;
-            if(countSuccess >= GetMajorityCount())
-            {
-                return true; // break on receiving majority
-            }
-        }
-    }
     return false;
-}
-
-/*
-*   @brief clears AppendEntriesMap          
-*/
-void RaftServer::ClearAppendEntriesMap() 
-{
-    _appendEntriesResponseMap.clear();
 }
 
 /*
@@ -534,7 +514,7 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
 *
 *   @param followerip
 */         
-void RaftServer::invokeAppendEntries(string followerIp) 
+void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCount) 
 {
     dbgprintf("[DEBUG] %s: Entering function with followerIp = %s\n", __func__, followerIp.c_str());
 
@@ -600,9 +580,12 @@ void RaftServer::invokeAppendEntries(string followerIp)
         dbgprintf("[DEBUG] %s: RPC sucess\n", __func__);
         g_stateHelper.SetMatchIndex(followerIp, g_stateHelper.GetLogLength()-1);
         g_stateHelper.SetNextIndex(followerIp, g_stateHelper.GetLogLength());
+        if(successCount!=nullptr)
+        {
+            (*successCount)++;
+            cout<<"[DEBUG]: Append Entries Success - Success Count Incremented to"<<(*successCount)<<endl;
+        }
     }
-
-    _appendEntriesResponseMap[followerIp] = reply;
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
@@ -646,14 +629,14 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 *   @brief  Leader broadcasts  by creating threads for each node,
 *           stops if it learns it is no longer the leader
 */ 
-void RaftServer::BroadcastAppendEntries() 
+void RaftServer::BroadcastAppendEntries(atomic<int>* successCount) 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for (auto& node: g_nodeList) 
     {
         if (node.first != _myIp) 
         {
-            thread(&RaftServer::invokeAppendEntries, this, node.first).detach();
+            thread(&RaftServer::invokeAppendEntries, this, node.first, successCount).detach();
         }
     }
     
@@ -698,7 +681,7 @@ void RaftServer::invokePeriodicAppendEntries()
     while (g_stateHelper.GetIdentity() == LEADER)
     {
         dbgprintf("[INFO] %s: Raising periodic Append Entries\n", __func__);
-        BroadcastAppendEntries();
+        BroadcastAppendEntries(nullptr);
         sleep(HB_SLEEP_IN_SEC);
     }
 }
