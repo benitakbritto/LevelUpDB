@@ -570,11 +570,12 @@ void RaftServer::invokeAppendEntries(string followerIp)
     {  
         becomeFollower();
     }
-    // RPC succeeded on the follower - Update match index
+    // RPC succeeded on the follower - Update match index and next index
     else if(reply.success())
     {
         dbgprintf("[DEBUG] %s: RPC sucess\n", __func__);
         g_stateHelper.SetMatchIndex(followerIp, g_stateHelper.GetLogLength()-1);
+        g_stateHelper.SetNextIndex(followerIp, g_stateHelper.GetLogLength());
     }
 
     _appendEntriesResponseMap[followerIp] = reply;
