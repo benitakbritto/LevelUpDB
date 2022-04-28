@@ -432,8 +432,11 @@ void RaftServer::runForElection()
     /* Send RequestVote RPCs to all servers */
     for (auto& node: g_nodeList) {
         if (node.first != GetMyIp()) {
-            std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
-        }
+            
+	 //std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
+        // TODO: try without threads
+	invokeRequestVote(node.first);
+	}
     }
 
     dbgprintf("[DEBUG] %s: Going to sleep for 2 seconds\n", __func__);    
@@ -617,7 +620,12 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
     
     grpc::Status status = stub->ReqVote(&context, req, &reply);
     cout << "[DEBUG] " << __func__ << " status code = " << status.error_code() << endl;
-    dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
+    //dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
+    // TODO: Remove later
+    if (status.error_code() == 12)
+    {
+    	exit(-1);
+    }
 
     if(status.ok() && reply.vote_granted_for())
     {   
@@ -668,6 +676,7 @@ void RaftServer::becomeLeader()
 
     g_stateHelper.SetIdentity(ServerIdentity::LEADER);
 
+    // TODO: Uncomment later
     // setNextIndexToLeaderLastIndex();
     // setMatchIndexToLeaderLastIndex();
 
@@ -1009,8 +1018,9 @@ int main(int argc, char **argv)
     // init
     g_stateHelper.SetIdentity(FOLLOWER);
     serverImpl.SetMyIp(argv[1]);
-    
-    std::thread(RunKeyValueServer, argv[1]).detach();
+   
+    // TODO: Uncomment later 
+    //std::thread(RunKeyValueServer, argv[1]).detach();
     std::thread(StartHB, argv[2]).detach();
     std::thread(RunServer, argv[1]).detach();
     
