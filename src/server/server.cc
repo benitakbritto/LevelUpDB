@@ -38,6 +38,7 @@
 #include "raft_server.h"
 #include "../util/levelDBWrapper.h"
 #include <grpcpp/resource_quota.h>
+#include "../util/snapshot_helper.h"
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -65,7 +66,9 @@ StateHelper g_stateHelper;
 RaftServer serverImpl;
 unordered_map <string, pair<int, unique_ptr<Raft::Stub>>> g_nodeList;
 RaftServer* signalHandlerService;
-LBNodeCommClient* lBNodeCommClient; 
+LBNodeCommClient* lBNodeCommClient;
+SnapshotHelper g_snapshotHelper;
+LevelDBWrapper levelDBWrapper;
 
 // for debug
 void PrintNodesInNodeList()
@@ -111,7 +114,7 @@ grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const Get
     return grpc::Status::OK;
 }
 
-grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply)  
+grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply)
 {
     cout << "[INFO] Received Put request" << endl;
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -123,7 +126,7 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
     serverImpl.BroadcastAppendEntries(&successCount);
             
     // wait for majority
-    do 
+    do
     {
         dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
         sleep(1);
@@ -131,7 +134,7 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
             
     g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1);
     serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
-            
+
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
     return grpc::Status::OK;
 }
@@ -148,9 +151,9 @@ void RunKeyValueServer(string args)
     builder.AddListeningPort(ip, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     unique_ptr<Server> server(builder.BuildAndStart());
-    
+
     cout << "[INFO] KeyValue Server listening on "<< ip << endl;
-    
+
     server->Wait();
 }
 
@@ -159,10 +162,10 @@ void RunKeyValueServer(string args)
  *****************************************************************************/
 
 /*
-*   @brief Updates the global nodeList with the sys state received from the LB
-* 
-*   @param AssertLeadershipReply    
-*/
+ *   @brief Updates the global nodeList with the sys state received from the LB
+ *
+ *   @param AssertLeadershipReply
+ */
 void LBNodeCommClient::updateFollowersInNodeList(AssertLeadershipReply *reply)
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -202,22 +205,22 @@ LBNodeCommClient::LBNodeCommClient(string kvIp, string raftIp, string lb_addr)
 }
 
 /*
-*   @brief Sends periodic heartbeats to the LB,
-*          updates the nodeList with the sys state received from the LB
-*/
-void LBNodeCommClient::SendHeartBeat() 
+ *   @brief Sends periodic heartbeats to the LB,
+ *          updates the nodeList with the sys state received from the LB
+ */
+void LBNodeCommClient::SendHeartBeat()
 {
     ClientContext context;
-            
+
     shared_ptr<ClientReaderWriter<HeartBeatRequest, HeartBeatReply> > stream(
-                (LBNodeCommClient::stub_)->SendHeartBeat(&context));
+        (LBNodeCommClient::stub_)->SendHeartBeat(&context));
 
     HeartBeatReply reply;
     HeartBeatRequest request;
     request.set_raft_ip(_raftIp);
     request.set_kv_ip(_kvIp);
 
-    while(1) 
+    while(1)
     {
         request.set_identity(g_stateHelper.GetIdentity());
         stream->Write(request);
@@ -234,9 +237,9 @@ void LBNodeCommClient::SendHeartBeat()
 }
 
 /*
-*   @brief Informs the LB of its identity as the new leader for current term
-*          updates the nodeList with the sys state received from the LB
-*/
+ *   @brief Informs the LB of its identity as the new leader for current term
+ *          updates the nodeList with the sys state received from the LB
+ */
 void LBNodeCommClient::InvokeAssertLeadership()
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
@@ -251,8 +254,8 @@ void LBNodeCommClient::InvokeAssertLeadership()
     do
     {
         ClientContext context;
-        reply.Clear();            
-                
+        reply.Clear();
+
         status = stub_->AssertLeadership(&context, request, &reply);
         dbgprintf("[DEBUG]: status code = %d\n", status.error_code());
         dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
@@ -282,33 +285,33 @@ void StartHB(string kvIp, string raftIp, string lb_addr)
  *****************************************************************************/
 
 /*
-*   @brief Sets self IP
-*
-*   @param ip
-*/
+ *   @brief Sets self IP
+ *
+ *   @param ip
+ */
 void RaftServer::SetMyIp(string ip)
 {
     _myIp = ip;
 }
 
 /*
-*   @brief Gets self IP
-*
-*   @return ip
-*/
+ *   @brief Gets self IP
+ *
+ *   @return ip
+ */
 string RaftServer::GetMyIp()
 {
     return _myIp;
 }
 
 /*
-*   @brief triggers AlarmCallBack 
-*
-*   @param signum
-*/
+ *   @brief triggers AlarmCallBack
+ *
+ *   @param signum
+ */
 void signalHandler(int signum) {
     signalHandlerService->AlarmCallback();
-	return;
+    return;
 }
 
 /*
@@ -326,8 +329,8 @@ void RaftServer::ServerInit()
     int old_errno = errno;
     errno = 0;
     signal(SIGALRM, &signalHandler);
-    
-    if (errno) 
+
+    if (errno)
     {
         dbgprintf("ERROR] Signal could not be set\n");
         errno = old_errno;
@@ -345,11 +348,11 @@ void RaftServer::ServerInit()
 }
 
 /*
-*   @brief builds cluster state based on HB reply from LB
-*          
-*   @param reply
-*/
-void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply) 
+ *   @brief builds cluster state based on HB reply from LB
+ *
+ *   @param reply
+ */
+void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply)
 {
     dbgprintf("[DEBUG] node size: %d \n", reply.node_data_size());
     for (int i = 0; i < reply.node_data_size(); i++)
@@ -379,10 +382,10 @@ void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply)
 }
 
 /*
-*   @brief calculates the number of responses needed for majority
-*          
-*   @return majority count
-*/
+ *   @brief calculates the number of responses needed for majority
+ *
+ *   @return majority count
+ */
 int RaftServer::GetMajorityCount()
 {
     int size = g_nodeList.size();
@@ -477,11 +480,11 @@ void RaftServer::invokeRequestVote(string nodeIp)
 }
 
 /*
-*   @brief  builds request for AppendEntries RPC
-*
-*   @param followerip, nextIndex
-*/  
-AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string followerip, int nextIndex) 
+ *   @brief  builds request for AppendEntries RPC
+ *
+ *   @param followerip, nextIndex
+ */
+AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string followerip, int nextIndex)
 {
     dbgprintf("[DEBUG] %s: Entering function with nextIndex = %d\n", __func__, nextIndex);
     AppendEntriesRequest request;
@@ -490,9 +493,9 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
     int prevLogIndex = g_stateHelper.GetMatchIndex(followerip);
     int prevLogTerm = g_stateHelper.GetTermAtIndex(prevLogIndex);
 
-    request.set_term(g_stateHelper.GetCurrentTerm()); 
-    request.set_leader_id(_myIp); 
-    request.set_prev_log_index(prevLogIndex); 
+    request.set_term(g_stateHelper.GetCurrentTerm());
+    request.set_leader_id(_myIp);
+    request.set_prev_log_index(prevLogIndex);
     request.set_prev_log_term(prevLogTerm);
     request.set_leader_commit_index(g_stateHelper.GetCommitIndex());
 
@@ -529,7 +532,7 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
     {
         return;
     }
-    
+
     // Init params to invoke the RPC
     AppendEntriesRequest request;
     AppendEntriesReply reply;
@@ -543,7 +546,7 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
     matchIndex = g_stateHelper.GetMatchIndex(followerIp);
 
     // Retry the RPC until log is consistent
-    do 
+    do
     {
         request = prepareRequestForAppendEntries(followerIp, nextIndex);
         dbgprintf("[DEBUG] %s: Checking if request is intact. Leader IP = %s\n", __func__, request.leader_id().c_str());
@@ -553,8 +556,8 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
         do
         {
             ClientContext context;
-            reply.Clear();            
-            
+            reply.Clear();
+
             status = stub->AppendEntries(&context, request, &reply);
             cout << "[DEBUG] "<< __func__ <<" status code = " << status.error_code() << " | IP = " << followerIp <<endl;
             dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
@@ -562,11 +565,11 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
             sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
 
         } while (status.error_code() == StatusCode::UNAVAILABLE && g_stateHelper.GetIdentity() == LEADER);
-      
+
         // Check if server should send snapshot instead
-        if(request.term() - reply.term() >= MAX_TERM_DIFF_FOR_SNAPSHOT) 
+        if(request.term() - reply.term() >= MAX_TERM_DIFF_FOR_SNAPSHOT)
         {
-            dbgprintf("[DEBUG]: Sending snapshot to %s\n", followerIp);
+            dbgprintf("[DEBUG]: Sending snapshot to %s\n", followerIp.c_str());
             invokeInstallSnapshot(followerIp);
             return;
         }
@@ -576,7 +579,7 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
         dbgprintf("[DEBUG] %s: reply.term() = %d | reply.success() = %d\n", __func__, reply.term(), reply.success());
         dbgprintf("[DEBUG] %s: shouldRetry = %d\n", __func__, shouldRetry);
         // AppendEntries failed because of log inconsistencies
-        if (shouldRetry) 
+        if (shouldRetry)
         {
             g_stateHelper.SetNextIndex(followerIp, nextIndex-1);
             g_stateHelper.SetMatchIndex(followerIp, matchIndex-1);
@@ -586,7 +589,7 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
 
     // Leader becomes follower
     if (request.term() < reply.term())
-    {  
+    {
         becomeFollower();
     }
     // RPC succeeded on the follower - Update match index and next index
@@ -606,10 +609,10 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
 }
 
 /*
-*   @brief  send requestVote RPC to follower node stub
-*           
-*   @param stub
-*/ 
+ *   @brief  send requestVote RPC to follower node stub
+ *
+ *   @param stub
+ */
 bool RaftServer::requestVote(Raft::Stub* stub) {
     dbgprintf("[DEBUG] %s: In function\n", __func__);
     ReqVoteRequest req;
@@ -653,7 +656,7 @@ void RaftServer::BroadcastAppendEntries(atomic<int>* successCount)
             thread(&RaftServer::invokeAppendEntries, this, node.first, successCount).detach();
         }
     }
-    
+
     // Stop this function if leader learns that it no longer is the leader
     if (g_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER)
     {
@@ -664,12 +667,12 @@ void RaftServer::BroadcastAppendEntries(atomic<int>* successCount)
 }
 
 /*
-*   @brief  Leader sets its identity as leader,
-*           matchIndex and nextIndex to its last index,
-*           invokes AssertLeadership RPC to inform LB of its leadership,
-*           spawns a thead to periodically call AppendEntries RPC,
-*/       
-void RaftServer::becomeLeader() 
+ *   @brief  Leader sets its identity as leader,
+ *           matchIndex and nextIndex to its last index,
+ *           invokes AssertLeadership RPC to inform LB of its leadership,
+ *           spawns a thead to periodically call AppendEntries RPC,
+ */
+void RaftServer::becomeLeader()
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
 
@@ -688,8 +691,8 @@ void RaftServer::becomeLeader()
 }
 
 /*
-*   @brief  BroadCast AppendEntries periodically
-*/ 
+ *   @brief  BroadCast AppendEntries periodically
+ */
 void RaftServer::invokePeriodicAppendEntries()
 {
     while (g_stateHelper.GetIdentity() == LEADER)
@@ -716,9 +719,9 @@ void RaftServer::setNextIndexToLeaderLastIndex()
 }
 
 /*
-*   @brief   sets matchIndex to last index on leader's log
-*/ 
-void RaftServer::setMatchIndexToLeaderLastIndex() 
+ *   @brief   sets matchIndex to last index on leader's log
+ */
+void RaftServer::setMatchIndexToLeaderLastIndex()
 {
     int leaderLastIndex = g_stateHelper.GetLogLength() - 1;
     
@@ -730,9 +733,9 @@ void RaftServer::setMatchIndexToLeaderLastIndex()
 }
 
 /*
-*   @brief   sets identity of node to follower
-*/
-void RaftServer::becomeFollower() 
+ *   @brief   sets identity of node to follower
+ */
+void RaftServer::becomeFollower()
 {
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
 }
@@ -749,15 +752,15 @@ void RaftServer::becomeCandidate()
     runForElection();
 }
 
-/* 
-*    @brief     
-*/
+/*
+ *    @brief
+ */
 void RaftServer::AlarmCallback() {
   if (g_stateHelper.GetIdentity() == ServerIdentity::LEADER) {
     // do nothing
   } else {
-    becomeCandidate();
-  }
+        becomeCandidate();
+    }
 }
 
 /* 
@@ -770,9 +773,9 @@ void RaftServer::resetElectionTimeout()
 	dbgprintf("[DEBUG] %s: _electionTimeout = %d\n", __func__, _electionTimeout);
 }
 
-/* 
-*    @brief   
-*/
+/*
+ *    @brief
+ */
 void RaftServer::setAlarm(int after_ms) {
     if (g_stateHelper.GetIdentity() == ServerIdentity::FOLLOWER) {
         // TODO:
@@ -793,40 +796,53 @@ void RaftServer::setAlarm(int after_ms) {
     return;
 }
 
-/* 
-*    @brief  sends InstallSnapshotRPC to followerIp 
-*  
-*   @param  followerIP
-*
-*/
-void RaftServer::invokeInstallSnapshot(string followerIp)
-{
+/*
+ *    @brief Send InstallSnapshotRPC to followerIp
+ *
+ *   @param followerIP : IP address of follower
+ *
+ */
+void RaftServer::invokeInstallSnapshot(string followerIp) {
     auto stub = g_nodeList[followerIp].second.get();
     InstallSnapshotRequest request;
     InstallSnapshotReply reply;
-    ClientContext context;
+    grpc::Status status;
+    int retryCount = 0;
 
-    // TODO: set key_value_pair in req
-    grpc::Status status = stub->InstallSnapshot(&context, request, &reply);
-    
-    // TODO: retry on failure
+    do {
+        ClientContext context;
+        reply.Clear();
+
+        // Create snapshot map 
+        unordered_map<string,string> snap_state = g_snapshotHelper.GetSnapshot();
+        KeyValuePair *kvPair;
+        
+        for (auto& it:snap_state) {
+            kvPair = request.add_key_value_pair();
+            kvPair->set_key(it.first);
+            kvPair->set_value(it.second);
+        } 
+        status = stub->InstallSnapshot(&context, request, &reply);
+        retryCount++;
+    } while (status.error_code() == StatusCode::UNAVAILABLE && retryCount<3);
 }
-/* 
-*    @brief   On receiving AppendEntries RPC,   
-*                   Case 1: Leader term < my term, reject the RPC
-*                   Case 2: Candidate receives valid AppendEntries RPC
-*                               a: in case of mismatch in term at log index , reject
-*                               b. otherwise, apply entries to log and execute commands
-*
-*   @param context 
-*   @param request 
-*   @param response 
-*
-*   @return grpc Status
-*/
-grpc::Status RaftServer::AppendEntries(ServerContext* context, 
-                                            const AppendEntriesRequest* request, 
-                                            AppendEntriesReply *reply)
+
+/*
+ *    @brief   On receiving AppendEntries RPC,
+ *                   Case 1: Leader term < my term, reject the RPC
+ *                   Case 2: Candidate receives valid AppendEntries RPC
+ *                               a: in case of mismatch in term at log index , reject
+ *                               b. otherwise, apply entries to log and execute commands
+ *
+ *   @param context
+ *   @param request
+ *   @param response
+ *
+ *   @return grpc Status
+ */
+grpc::Status RaftServer::AppendEntries(ServerContext* context,
+                                       const AppendEntriesRequest* request,
+                                       AppendEntriesReply *reply)
 {
     dbgprintf("[DEBUG]: AppendEntries - Entering RPC\n");
     cout << "Append Entries RPC" << endl;
@@ -844,7 +860,7 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
     }
 
     // Case 2: Candidate receives valid AppendEntries RPC
-    else 
+    else
     {
         // valid RPC
 	    resetElectionTimeout();
@@ -872,7 +888,7 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
             // dbgprintf("[DEBUG]: AppendEntries RPC - No log inconsistencies\n");
             // Apply entries to log
             vector<Entry> entries;
-            for (int i = 0; i < request->log_entry_size(); i++) 
+            for (int i = 0; i < request->log_entry_size(); i++)
             {
                 auto logEntry = request->log_entry(i);
 
@@ -903,15 +919,15 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
     return grpc::Status::OK;
 }
 
-/* 
+/*
 *    @brief   Execute commands from start index to end index,
                 set lastAppliedIndex iteratively
 *
 *   @param start 
-*   @param end 
+*   @param end
 *
 */
-void RaftServer::ExecuteCommands(int start, int end) 
+void RaftServer::ExecuteCommands(int start, int end)
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for(int i = start; i <= end; i++)
@@ -919,19 +935,36 @@ void RaftServer::ExecuteCommands(int start, int end)
         // levelDBWrapper.Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
         // TODO: check failure
         g_stateHelper.SetLastAppliedIndex(i); 
+
+        // Create Snapshot after a few state changes
+        if (g_stateHelper.GetLastAppliedIndex() >= APPLIED_INDEX_BFORE_SNAPSHOT) {
+            serverImpl.CreateSnapshot();
+        }
     }
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
-/* 
-*   @brief   On receiving ReqVote RPC, 
+/**
+ * @brief Create snapshot of current persistant state
+ * 
+ */
+void RaftServer::CreateSnapshot()
+{
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+    unordered_map<string, string> snap_state = levelDBWrapper.GetSnapshot();
+    g_snapshotHelper.SetSnapshot(snap_state);
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+}
+
+/*
+*   @brief   On receiving ReqVote RPC,
 *               Case 1: if req term < current term
 *               Case 2: if req term > current term
                 Case 3: if no votes have been made for this term, or voted for this leader before
 *
-*   @param context 
-*   @param request 
-*   @param response 
+*   @param context
+*   @param request
+*   @param response
 *
 *   @return grpc Status
 *
@@ -1014,17 +1047,22 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
     return grpc::Status::OK;
 }
 
-/* 
-*   @brief   Installs Snapshot on server
-*               
-*   @param context 
-*   @param request 
-*   @param response 
-*
-*   @return grpc Status
-*/
+/*
+ *   @brief Installs Snapshot on server
+ *
+ *   @param context : GRPC Server Context
+ *   @param request : GRPC Request
+ *   @param response : GRPC Response
+ *
+ *   @return grpc Status : GRPC Status of installation operation 
+ */
 grpc::Status RaftServer::InstallSnapshot(ServerContext* context, const InstallSnapshotRequest* request, InstallSnapshotReply* reply) {
-    // TODO: Install the snapshot onto node
+    unordered_map<string, string> snap_state;
+    for (int i = 0; i < request->key_value_pair_size(); i++) {
+        auto kvPair = request->key_value_pair(i);
+        snap_state[kvPair.key()] = kvPair.value();
+    }
+    levelDBWrapper.AtomicPut(snap_state);
     return grpc::Status::OK;
 }
 

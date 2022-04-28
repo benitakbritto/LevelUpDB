@@ -6,7 +6,9 @@
 #include <unistd.h>
 #include <cassert>
 #include <iostream>
+#include <unordered_map>
 #include "leveldb/db.h"
+#include "leveldb/write_batch.h"
 
 /******************************************************************************
  * NAMESPACES
@@ -23,6 +25,7 @@ class LevelDBWrapper {
     Options options;
     WriteOptions write_options;
     ReadOptions read_options;
+    ReadOptions snapshot_options;
     
     public:
     LevelDBWrapper(){
@@ -38,6 +41,9 @@ class LevelDBWrapper {
    
    leveldb::Status Get(string key, string &value);
    leveldb::Status Put(string key, string value);
+   void AtomicPut(unordered_map<string, string>);
+   unordered_map<string, string> GetSnapshot();
+   void ReleaseSnapshot();
 };
 
 #endif

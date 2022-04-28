@@ -85,6 +85,7 @@ public:
   bool ReceivedMajority(atomic<int>* successCount);
   void ExecuteCommands(int start, int end);
   void BuildSystemStateFromHBReply(HeartBeatReply reply);
+  void CreateSnapshot();
 
   grpc::Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
   grpc::Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
