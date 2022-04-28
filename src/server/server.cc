@@ -235,6 +235,7 @@ void LBNodeCommClient::InvokeAssertLeadership()
                 
         status = stub_->AssertLeadership(&context, request, &reply);
         dbgprintf("[DEBUG]: status code = %d\n", status.error_code());
+        dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
         retryCount++;
         sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
 
@@ -550,6 +551,7 @@ void RaftServer::invokeAppendEntries(string followerIp)
             
             status = stub->AppendEntries(&context, request, &reply);
             cout << "[DEBUG] "<< __func__ <<" status code = " << status.error_code() << " | IP = " << followerIp <<endl;
+            dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
             retryCount++;
             sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
 
@@ -608,6 +610,7 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 
     grpc::Status status = stub->ReqVote(&context, req, &reply);
     cout << "[DEBUG] " << __func__ << " status code = " << status.error_code() << endl;
+    dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
 
     if(status.ok() && reply.votegrantedfor())
         return true;
