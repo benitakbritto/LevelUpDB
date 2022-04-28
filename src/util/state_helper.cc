@@ -86,14 +86,16 @@ void StateHelper::Insert(int start_index, vector<Entry> &entries)
     int index = 0;
 
     index = start_index;
+    dbgprintf("[DEBUG] %s: start_index = %d\n", __func__, start_index);
+    dbgprintf("[DEBUG] %s: GetLogLength = %d\n", __func__, GetLogLength());
+
     if(index==GetLogLength())
     {
-        dbgprintf("Inside latest INSERT function\n");
+        dbgprintf("[DEBUG] %s: Calling append\n", __func__);
         for(auto val : entries)
         {
             Append(val.term, val.key, val.value);
         }
-        dbgprintf("Done with the latest INSERT function\n");
         return;
     }
     offset = vReplicatedLogObj.GetOffset(start_index);
