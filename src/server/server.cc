@@ -423,7 +423,7 @@ void RaftServer::runForElection()
     /* Vote for self - hence 1*/
     _votesGained = 1;
     g_stateHelper.AddVotedFor(g_stateHelper.GetCurrentTerm(), GetMyIp());
-    dbgprintf("[DEBUG] %s: Voted for = %d\n", __func__, g_stateHelper.GetVotedFor(g_stateHelper.GetCurrentTerm()));
+    dbgprintf("[DEBUG] %s: Voted for = %s\n", __func__, g_stateHelper.GetVotedFor(g_stateHelper.GetCurrentTerm()).c_str());
 
     /*Reset Election Timer*/
     resetElectionTimeout();
@@ -438,7 +438,7 @@ void RaftServer::runForElection()
 
     dbgprintf("[DEBUG] %s: Going to sleep for 2 seconds\n", __func__);    
     sleep(2);
-    dbgprintf("[DEBUG] %s: _votesGained\n", __func__, _votesGained);    
+    //dbgprintf("[DEBUG] %s: _votesGained\n", __func__, _votesGained);    
 
     if (_votesGained > g_nodeList.size()/2 && g_stateHelper.GetIdentity() == ServerIdentity::CANDIDATE) {
         cout<<"[INFO] Candidate received majority of "<<_votesGained<<endl;
@@ -474,7 +474,7 @@ void RaftServer::invokeRequestVote(string nodeIp) {
         if(requestVote(g_nodeList[nodeIp].second.get()))
         {
             _votesGained++;
-            dbgprint("[DEBUG] %s: _votesGained for nodeIp = %d\n", __func__, nodeIp, _votesGained);
+            //dbgprintf("[DEBUG] %s: _votesGained for %s = %d\n", __func__, nodeIp.c_str(), _votesGained);
         }
     }
 }
@@ -613,7 +613,7 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
     req.set_candidate_id(_myIp);
     req.set_last_log_index(g_stateHelper.GetLogLength()-1);
     req.set_last_log_term(g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1));
-    dbgprintf("[DEBUG]: Send ReqVote with param | term = %d | candidate_id = %d | last_log_index = %d | last_log_term = %d\n", req.term(), req.candidate_id(), req.last_log_index(), req.last_log_term());
+    dbgprintf("[DEBUG]: Send ReqVote with param | term = %d | candidate_id = %s | last_log_index = %d | last_log_term = %d\n", req.term(), req.candidate_id().c_str(), req.last_log_index(), req.last_log_term());
     
     grpc::Status status = stub->ReqVote(&context, req, &reply);
     cout << "[DEBUG] " << __func__ << " status code = " << status.error_code() << endl;
@@ -759,8 +759,8 @@ void RaftServer::AlarmCallback() {
 void RaftServer::resetElectionTimeout() 
 {
     _electionTimeout = _minElectionTimeout + (rand() % 
-                                            _maxElectionTimeout - _minElectionTimeout + 1));
-	dbgprintf("[DEBUG] %s: _electionTimeout = %d\n", _electionTimeout);
+                                            _maxElectionTimeout - _minElectionTimeout + 1);
+	dbgprintf("[DEBUG] %s: _electionTimeout = %d\n", __func__, _electionTimeout);
 }
 
 /* 
@@ -913,15 +913,15 @@ void RaftServer::ExecuteCommands(int start, int end)
 */
 grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) 
 {
-    cout<<"[ELECTION] Received Reqvote from " << request->candidateid() << " for term " << request->term() << endl;
+    cout<<"[ELECTION] Received Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
     int myCurrentTerm = g_stateHelper.GetCurrentTerm();
     int myLastLogIndex = g_stateHelper.GetLogLength() - 1;
 
-    if(request->term() < currentTerm)
+    if(request->term() < myCurrentTerm)
     {
         reply->set_term(myCurrentTerm);
         reply->set_vote_granted_for(false);
-        cout << "[ELECTION] Rejected Reqvote from " << request->candidateid() << " for term " << request->term() << endl;
+        cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
         return grpc::Status::OK;
     }
     else 
@@ -941,7 +941,7 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
             if(request->last_log_term() > g_stateHelper.GetTermAtIndex(myLastLogIndex))
             {
                 g_stateHelper.AddVotedFor(request->term(), request->candidate_id());
-                reply->set_term(currentTerm);
+                reply->set_term(myCurrentTerm);
                 reply->set_vote_granted_for(true);
 
                 cout << "[ELECTION] Granted vote for " << request->candidate_id() << " for term " << request->term() << " Reason: Case A" << endl;
@@ -953,7 +953,7 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
                 if(request->last_log_index() >= myLastLogIndex)
                 {
                     g_stateHelper.AddVotedFor(request->term(), request->candidate_id());
-                    reply->set_term(currentTerm);
+                    reply->set_term(myCurrentTerm);
                     reply->set_vote_granted_for(true);
         
                     cout << "[ELECTION] Granted Reqvote from " << request->candidate_id() << " for term " << request->term() << " Reason: Case B"<<endl;            
@@ -961,31 +961,31 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
                 }
                 else
                 {
-                    reply->set_term(currentTerm);
+                    reply->set_term(myCurrentTerm);
                     reply->set_vote_granted_for(false);
-                    cout << "[ELECTION] Rejected Reqvote from " << request->candidateid() << " for term " << request->term() << endl;
+                    cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
                     return grpc::Status::OK;
                 }
             }
             else
             {
-                reply->set_term(currentTerm);
+                reply->set_term(myCurrentTerm);
                 reply->set_vote_granted_for(false);
-                cout << "[ELECTION] Rejected Reqvote from " << request->candidateid() << " for term " << request->term() << endl;
+                cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
                 return grpc::Status::OK;
             }
         }
         else
         {    
-            reply->set_term(currentTerm);
+            reply->set_term(myCurrentTerm);
             reply->set_vote_granted_for(false);
-            cout << "[ELECTION] Rejected Reqvote from " << request->candidateid() << " for term " << request->term() << endl;
+            cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
             return grpc::Status::OK;
         }
     }
-    reply->set_term(currentTerm);
+    reply->set_term(myCurrentTerm);
     reply->set_vote_granted_for(false);
-    cout << "[ELECTION] Rejected Reqvote from " << request->candidateid() << " for term " << request->term() << endl;
+    cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
     return grpc::Status::OK;
 }
 
