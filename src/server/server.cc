@@ -134,6 +134,7 @@ void RunKeyValueServer(char* args)
     
     server->Wait();
     //return;
+    dbgprintf("RunKeyValueServer thread exiting \n");
 }
 
 /******************************************************************************
