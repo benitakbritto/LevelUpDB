@@ -7,8 +7,7 @@
 */
 unordered_map<string, string> VolatileSnapshot::GetSnapshot()
 {
-    // return snapshotObj;
-    return unordered_map<string, string>();
+    return snapshotObj;
 }
 
 /*

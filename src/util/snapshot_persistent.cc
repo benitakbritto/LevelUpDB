@@ -28,7 +28,7 @@ void PersistentSnapshot::SetSnapshot(unordered_map<string, string> snapshot)
 *
 *   @return  error code
 */
-int writeSnapshotToFile(string snapshotFilePath)
+int PersistentSnapshot::writeSnapshotToFile(string snapshotFilePath)
 {
     // TODO: Parse snapshot and write to file
     return 0;
@@ -38,7 +38,7 @@ int writeSnapshotToFile(string snapshotFilePath)
 /*
 *   @brief  Truncate current log file
 */
-void truncateLog() 
+void PersistentSnapshot::truncateLog() 
 {
 
 }

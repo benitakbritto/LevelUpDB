@@ -5,8 +5,8 @@ unordered_map<string, string> SnapshotHelper::GetSnapshot()
     return vSnapshotObj.GetSnapshot();
 }
 
-void SnapshotHelper::GetSnapshot(unordered_map<string, string> snapshot)
+void SnapshotHelper::SetSnapshot(unordered_map<string, string> snapshot)
 {
     vSnapshotObj.SetSnapshot(snapshot);
-    pSnapshotObjj.SetSnapshot(snapshot);
+    pSnapshotObj.SetSnapshot(snapshot);
 }

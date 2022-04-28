@@ -28,12 +28,12 @@
 class SnapshotHelper
 {
     private:
-        PersistentSnapshot pSnapshotObjj;
+        PersistentSnapshot pSnapshotObj;
         VolatileSnapshot vSnapshotObj;
     
     public:
         unordered_map<string, string> GetSnapshot();
-        void GetSnapshot(unordered_map<string, string> snapshot);
+        void SetSnapshot(unordered_map<string, string> snapshot);
 };
 
 
