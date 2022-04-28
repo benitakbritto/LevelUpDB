@@ -78,6 +78,7 @@ void StateHelper::Append(int term, string key, string value)
 *   @param start index
 *   @param entries (term, key, value
 */
+// TODO: Make cleaner - append is being called in Insert
 void StateHelper::Insert(int start_index, vector<Entry> &entries)
 {
     dbgprintf("[DEBUG]: Insert - Entering function\n");
