@@ -37,7 +37,6 @@ using kvstore::HeartBeatReply;
 
 class RaftServer final : public Raft::Service {
 private: 
-  unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
   MutexMap _lockHelper;
   string _myIp;
 
@@ -57,7 +56,7 @@ private:
   void invokeRequestVote(string host);
   bool requestVote(Raft::Stub* stub);
   
-  void invokeAppendEntries(string node_ip);
+  void invokeAppendEntries(string node_ip, atomic<int>* successCount);
   void invokePeriodicAppendEntries();
 
   void becomeFollower();
@@ -78,9 +77,8 @@ public:
   void Run();
   void Wait();
   void ServerInit();
-  void ClearAppendEntriesMap();
-  void BroadcastAppendEntries();
-  bool ReceivedMajority();
+  void BroadcastAppendEntries(atomic<int>* successCount);
+  bool ReceivedMajority(atomic<int>* successCount);
   void ExecuteCommands(int start, int end);
   void BuildSystemStateFromHBReply(HeartBeatReply reply);
 

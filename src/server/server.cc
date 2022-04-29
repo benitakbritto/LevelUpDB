@@ -37,6 +37,7 @@
 #include "../util/state_helper.h"
 #include "raft_server.h"
 #include "../util/levelDBWrapper.h"
+#include <grpcpp/resource_quota.h>
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -114,18 +115,19 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
 {
     cout << "[INFO] Received Put request" << endl;
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-
-    serverImpl.ClearAppendEntriesMap();
             
-    g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value());        
-    serverImpl.BroadcastAppendEntries();
+    g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value()); 
+
+    atomic<int> successCount;
+    successCount = 1;       
+    serverImpl.BroadcastAppendEntries(&successCount);
             
     // wait for majority
     do 
     {
         dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
         sleep(1);
-    } while(!serverImpl.ReceivedMajority());
+    } while(!serverImpl.ReceivedMajority(&successCount));
             
     g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1);
     serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
@@ -134,9 +136,9 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
     return grpc::Status::OK;
 }
 
-void RunKeyValueServer(char* args) 
+void RunKeyValueServer(string args) 
 {
-    string ip = string((char *) args);
+    string ip = string(args);
     ip = convertToLocalAddress(ip);
 
     KeyValueOpsServiceImpl service;
@@ -150,8 +152,6 @@ void RunKeyValueServer(char* args)
     cout << "[INFO] KeyValue Server listening on "<< ip << endl;
     
     server->Wait();
-    //return;
-    dbgprintf("RunKeyValueServer thread exiting \n");
 }
 
 /******************************************************************************
@@ -275,8 +275,6 @@ void StartHB(string kvIp, string raftIp, string lb_addr)
     dbgprintf("[DEBUG] lb_addr = %s\n", lb_addr.c_str());
     lBNodeCommClient = new LBNodeCommClient(kvIp, raftIp, lb_addr); 
     lBNodeCommClient->SendHeartBeat();
-
-    //return;
 }
 
 /******************************************************************************
@@ -323,7 +321,7 @@ void RaftServer::ServerInit()
 {    
     dbgprintf("[DEBUG]: %s: Inside function\n", __func__);
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);    
-   
+    
     
     int old_errno = errno;
     errno = 0;
@@ -398,36 +396,15 @@ int RaftServer::GetMajorityCount()
 *       true : on receiving majority or if there is only one node in the cluster
 *       false: otherwise
 */
-bool RaftServer::ReceivedMajority() 
+bool RaftServer::ReceivedMajority(atomic<int>* successCount) 
 {
     // Leader is the only node alive
-    if (g_nodeList.size() == 1) 
+    if (g_nodeList.size() == 1 || *successCount > g_nodeList.size()/2) 
     {
         return true;
     }
 
-    int countSuccess = 1;
-    
-    for (auto& it: _appendEntriesResponseMap) {
-        AppendEntriesReply replyReceived = it.second;
-        if(replyReceived.success()) 
-        {
-            countSuccess++;
-            if(countSuccess >= GetMajorityCount())
-            {
-                return true; // break on receiving majority
-            }
-        }
-    }
     return false;
-}
-
-/*
-*   @brief clears AppendEntriesMap          
-*/
-void RaftServer::ClearAppendEntriesMap() 
-{
-    _appendEntriesResponseMap.clear();
 }
 
 /*
@@ -439,10 +416,12 @@ void RaftServer::ClearAppendEntriesMap()
 void RaftServer::runForElection() 
 {
     g_stateHelper.AddCurrentTerm(g_stateHelper.GetCurrentTerm() + 1);
+    dbgprintf("[DEBUG] %s: Current term = %d\n", __func__, g_stateHelper.GetCurrentTerm());
 
     /* Vote for self - hence 1*/
     _votesGained = 1;
     g_stateHelper.AddVotedFor(g_stateHelper.GetCurrentTerm(), GetMyIp());
+    dbgprintf("[DEBUG] %s: Voted for = %s\n", __func__, g_stateHelper.GetVotedFor(g_stateHelper.GetCurrentTerm()).c_str());
 
     /*Reset Election Timer*/
     resetElectionTimeout();
@@ -450,19 +429,24 @@ void RaftServer::runForElection()
 
     /* Send RequestVote RPCs to all servers */
     for (auto& node: g_nodeList) {
-        if (node.first !=GetMyIp()) {
-            std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
-            //invokeRequestVote(node.first);
-        }
+        if (node.first != GetMyIp()) {
+            
+	 std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
+        // TODO: try without threads
+	//invokeRequestVote(node.first);
+	}
     }
-    
+
+    dbgprintf("[DEBUG] %s: Going to sleep for 2 seconds\n", __func__);    
     sleep(2);
-    //cout<<"Woken up: " <<_votesGained<<endl;
+    //dbgprintf("[DEBUG] %s: _votesGained\n", __func__, _votesGained);    
+
     if (_votesGained > g_nodeList.size()/2 && g_stateHelper.GetIdentity() == ServerIdentity::CANDIDATE) {
         cout<<"[INFO] Candidate received majority of "<<_votesGained<<endl;
         cout<<"[INFO] Change Role to LEADER for term "<<g_stateHelper.GetCurrentTerm()<<endl;
         becomeLeader();
     }
+    dbgprintf("[DEBUG] %s: Did not get enough votes in time\n", __func__); 
 }
 
 /*
@@ -470,15 +454,15 @@ void RaftServer::runForElection()
 *
 *   @param nodeIp
 */       
-void RaftServer::invokeRequestVote(string nodeIp) {
+void RaftServer::invokeRequestVote(string nodeIp) 
+{
 
-    cout<<"[INFO]: Sending Request Vote to "<<nodeIp<<" | term = "<<g_stateHelper.GetCurrentTerm()<<endl;
+    cout << "[INFO]: Sending Request Vote to " << nodeIp << " | term = " << g_stateHelper.GetCurrentTerm() << endl;
     if(g_nodeList[nodeIp].second.get()==nullptr)
     {
        if (g_stateHelper.GetIdentity() == CANDIDATE)
        { 
-           dbgprintf("Creating stub to raft of other node\n");
-           g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(getRaftIp(nodeIp), grpc::InsecureChannelCredentials()));
+            g_nodeList[nodeIp].second = Raft::NewStub(grpc::CreateChannel(getRaftIp(nodeIp), grpc::InsecureChannelCredentials()));
        }
        else
        {
@@ -486,7 +470,7 @@ void RaftServer::invokeRequestVote(string nodeIp) {
        }
     }
 
-    if(requestVote(g_nodeList[nodeIp].second.get()))
+    if(g_stateHelper.GetIdentity() == CANDIDATE && requestVote(g_nodeList[nodeIp].second.get()))
     {
         _votesGained++;
     }
@@ -537,7 +521,7 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
 *
 *   @param followerip
 */         
-void RaftServer::invokeAppendEntries(string followerIp) 
+void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCount) 
 {
     dbgprintf("[DEBUG] %s: Entering function with followerIp = %s\n", __func__, followerIp.c_str());
 
@@ -603,9 +587,12 @@ void RaftServer::invokeAppendEntries(string followerIp)
         dbgprintf("[DEBUG] %s: RPC sucess\n", __func__);
         g_stateHelper.SetMatchIndex(followerIp, g_stateHelper.GetLogLength()-1);
         g_stateHelper.SetNextIndex(followerIp, g_stateHelper.GetLogLength());
+        if(successCount!=nullptr)
+        {
+            (*successCount)++;
+            cout<<"[DEBUG]: Append Entries Success - Success Count Incremented to"<<(*successCount)<<endl;
+        }
     }
-
-    _appendEntriesResponseMap[followerIp] = reply;
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
@@ -616,30 +603,29 @@ void RaftServer::invokeAppendEntries(string followerIp)
 *   @param stub
 */ 
 bool RaftServer::requestVote(Raft::Stub* stub) {
+    dbgprintf("[DEBUG] %s: In function\n", __func__);
     ReqVoteRequest req;
-
-    req.set_term(g_stateHelper.GetCurrentTerm());
-    req.set_candidateid(_myIp);
-    req.set_lastlogindex(g_stateHelper.GetLogLength()-1);
-    req.set_lastlogterm(g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1));
-
     ReqVoteReply reply;
     ClientContext context;
-    
-    // TODO: Not needed?
-    // context.set_deadline(chrono::system_clock::now() + 
-    //     chrono::milliseconds(_heartbeatInterval));
 
+    dbgprintf("[DEBUG] %s: Log Length %d = \n", __func__, g_stateHelper.GetLogLength());
+    req.set_term(g_stateHelper.GetCurrentTerm());
+    req.set_candidate_id(_myIp);
+    req.set_last_log_index(g_stateHelper.GetLogLength()-1);
+    req.set_last_log_term(g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength()-1));
+    dbgprintf("[DEBUG]: Send ReqVote with param | term = %d | candidate_id = %s | last_log_index = %d | last_log_term = %d\n", req.term(), req.candidate_id().c_str(), req.last_log_index(), req.last_log_term());
+    
     grpc::Status status = stub->ReqVote(&context, req, &reply);
     cout << "[DEBUG] " << __func__ << " status code = " << status.error_code() << endl;
-    dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
 
-    if(status.ok() && reply.votegrantedfor())
+    if(status.ok() && reply.vote_granted_for())
+    {   
         return true;
+    }
     
     if(status.ok() && reply.term() > g_stateHelper.GetCurrentTerm())
     {
-        g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+        becomeFollower();
     }
     return false;
 }
@@ -649,14 +635,14 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 *   @brief  Leader broadcasts  by creating threads for each node,
 *           stops if it learns it is no longer the leader
 */ 
-void RaftServer::BroadcastAppendEntries() 
+void RaftServer::BroadcastAppendEntries(atomic<int>* successCount) 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for (auto& node: g_nodeList) 
     {
         if (node.first != _myIp) 
         {
-            thread(&RaftServer::invokeAppendEntries, this, node.first).detach();
+            thread(&RaftServer::invokeAppendEntries, this, node.first, successCount).detach();
         }
     }
     
@@ -701,7 +687,7 @@ void RaftServer::invokePeriodicAppendEntries()
     while (g_stateHelper.GetIdentity() == LEADER)
     {
         dbgprintf("[INFO] %s: Raising periodic Append Entries\n", __func__);
-        BroadcastAppendEntries();
+        BroadcastAppendEntries(nullptr);
         sleep(HB_SLEEP_IN_SEC);
     }
 }
@@ -748,9 +734,10 @@ void RaftServer::becomeFollower()
 *               resets election timeout,
 *               runs for election on timeout 
 */
-void RaftServer::becomeCandidate() {
+void RaftServer::becomeCandidate() 
+{
     g_stateHelper.SetIdentity(ServerIdentity::CANDIDATE);
-    dbgprintf("INFO] Become Candidate\n");
+    dbgprintf("[INFO] Become Candidate\n");
     runForElection();
 }
 
@@ -768,10 +755,11 @@ void RaftServer::AlarmCallback() {
 /* 
 *    @brief   sets election timeout to a random duration   
 */
-void RaftServer::resetElectionTimeout() {
+void RaftServer::resetElectionTimeout() 
+{
     _electionTimeout = _minElectionTimeout + (rand() % 
-        (_maxElectionTimeout - _minElectionTimeout + 1));
-	cout << _electionTimeout << " time " << endl;
+                                            _maxElectionTimeout - _minElectionTimeout + 1);
+	dbgprintf("[DEBUG] %s: _electionTimeout = %d\n", __func__, _electionTimeout);
 }
 
 /* 
@@ -924,63 +912,85 @@ void RaftServer::ExecuteCommands(int start, int end)
 */
 grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) 
 {
-    cout<<"[ELECTION] Received Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<endl;
+    cout<<"[ELECTION] Received Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
+    int myCurrentTerm = g_stateHelper.GetCurrentTerm();
+    int myLastLogIndex = g_stateHelper.GetLogLength() - 1;
 
-    reply->set_votegrantedfor(false);
-    reply->set_term(g_stateHelper.GetCurrentTerm());
-
-    // Case 1
-    if(request->term() < g_stateHelper.GetCurrentTerm())
+    if(request->term() < myCurrentTerm)
     {
-        cout<<"[ELECTION] Rejected Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<" Reason: Lesser Term"<<endl;
+        reply->set_term(myCurrentTerm);
+        reply->set_vote_granted_for(false);
+        cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
         return grpc::Status::OK;
     }
-
-    // Case 2
-    if(request->term() > g_stateHelper.GetCurrentTerm())
+    else 
     {
-        g_stateHelper.AddCurrentTerm(request->term());
-        reply->set_term(g_stateHelper.GetCurrentTerm());
-	becomeFollower();
-    }
-
-    // Case 3
-    if(g_stateHelper.GetVotedFor(request->term())=="" || g_stateHelper.GetVotedFor(request->term()) == request->candidateid())
-    {
-        if(request->lastlogterm() > g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength() - 1))
+        // update my term and become follower
+        if(request->term() > g_stateHelper.GetCurrentTerm())
         {
-            cout<<"[ELECTION] Granted Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<" Reason: Case A"<<endl;
-	
-	    if(g_stateHelper.GetVotedFor(request->term())=="" || g_stateHelper.GetVotedFor(request->term()) == request->candidateid())
-	    {
-		g_stateHelper.AddVotedFor(request->term(), request->candidateid());
-            	reply->set_votegrantedfor(true);
-	    }
-            return grpc::Status::OK;
+            g_stateHelper.AddCurrentTerm(request->term()); 
+            myCurrentTerm = g_stateHelper.GetCurrentTerm();
+            becomeFollower();
         }
 
-        if(request->lastlogterm() == g_stateHelper.GetTermAtIndex(g_stateHelper.GetLogLength() - 1))
+        // Check if you can vote for this term
+        if(g_stateHelper.GetVotedFor(request->term()) == "")
         {
-            if(request->lastlogindex() >= g_stateHelper.GetLogLength()-1)
+            // Candidate's term is more than mine
+            if(request->last_log_term() > g_stateHelper.GetTermAtIndex(myLastLogIndex))
             {
-                cout<<"[ELECTION] Granted Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<" Reason: Case B"<<endl;
-		if(g_stateHelper.GetVotedFor(request->term())=="" || g_stateHelper.GetVotedFor(request->term()) == request->candidateid())
-		{
-                    g_stateHelper.AddVotedFor(request->term(), request->candidateid());
-                    reply->set_votegrantedfor(true);
-		}
+                g_stateHelper.AddVotedFor(request->term(), request->candidate_id());
+                reply->set_term(myCurrentTerm);
+                reply->set_vote_granted_for(true);
+
+                cout << "[ELECTION] Granted vote for " << request->candidate_id() << " for term " << request->term() << " Reason: Case A" << endl;
+                return grpc::Status::OK;
+            }
+            else if(request->last_log_term() == g_stateHelper.GetTermAtIndex(myLastLogIndex))
+            {
+                // Candidate's term is same as mine & has equal/more logs than me
+                if(request->last_log_index() >= myLastLogIndex)
+                {
+                    g_stateHelper.AddVotedFor(request->term(), request->candidate_id());
+                    reply->set_term(myCurrentTerm);
+                    reply->set_vote_granted_for(true);
+        
+                    cout << "[ELECTION] Granted Reqvote from " << request->candidate_id() << " for term " << request->term() << " Reason: Case B"<<endl;            
+                    return grpc::Status::OK;
+                }
+                else
+                {
+                    reply->set_term(myCurrentTerm);
+                    reply->set_vote_granted_for(false);
+                    cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
+                    return grpc::Status::OK;
+                }
+            }
+            else
+            {
+                reply->set_term(myCurrentTerm);
+                reply->set_vote_granted_for(false);
+                cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
                 return grpc::Status::OK;
             }
         }
+        else
+        {    
+            reply->set_term(myCurrentTerm);
+            reply->set_vote_granted_for(false);
+            cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
+            return grpc::Status::OK;
+        }
     }
-    cout<<"[ELECTION] Rejected Reqvote from "<<request->candidateid()<<" for term "<<request->term()<<" Reason: Else"<<endl;
-
+    reply->set_term(myCurrentTerm);
+    reply->set_vote_granted_for(false);
+    cout << "[ELECTION] Rejected Reqvote from " << request->candidate_id() << " for term " << request->term() << endl;
     return grpc::Status::OK;
 }
 
-void RunServer(string ip) {
+void RunRaftServer(string ip) {
     ip = addToPort(ip);
-    dbgprintf("RunServer listening on %s \n", ip.c_str());
+    dbgprintf("RunRaftServer listening on %s \n", ip.c_str());
     ServerBuilder builder;
     builder.AddListeningPort(ip, grpc::InsecureServerCredentials());
     builder.RegisterService(&serverImpl);
@@ -995,12 +1005,13 @@ void RunServer(string ip) {
 int main(int argc, char **argv) 
 {
     // init
+    g_stateHelper = *(new StateHelper(argv[1]));
     g_stateHelper.SetIdentity(FOLLOWER);
     serverImpl.SetMyIp(argv[2]);
     
     std::thread(RunKeyValueServer, argv[1]).detach();
     std::thread(StartHB, argv[1], argv[2], argv[3]).detach();
-    std::thread(RunServer, argv[2]).detach();
+    std::thread(RunRaftServer, argv[2]).detach();
     
     // Keep this loop, so that the program doesn't return
     while(1) {

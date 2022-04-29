@@ -53,6 +53,7 @@ private:
 
 public:
     PersistentReplicatedLog();
+    PersistentReplicatedLog(string ip);
     
     void Insert(int offset, int term, string key, string value);
     void Append(int term, string key, string value, int offset);
