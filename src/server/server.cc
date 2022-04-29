@@ -166,24 +166,24 @@ void RunKeyValueServer(char* args)
 void LBNodeCommClient::updateFollowersInNodeList(AssertLeadershipReply *reply)
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-    for (int i = 0; i < reply->follower_ip_size(); i++)
+    for (int i = 0; i < reply->follower_meta_size(); i++)
     {
-        auto nodeData = reply->follower_ip(i);
-        string ip = nodeData.ip();
-        dbgprintf("[DEBUG] %s: ip = %s\n", __func__, ip.c_str());
+        auto nodeData = reply->follower_meta(i);
+        string raftIp = nodeData.raft_ip();
+        dbgprintf("[DEBUG] %s: ip = %s\n", __func__, raftIp.c_str());
         // new node
-        if (g_nodeList.count(ip) == 0)
+        if (g_nodeList.count(raftIp) == 0)
         {
             int leaderLastIndex = g_stateHelper.GetLogLength();
-            g_stateHelper.SetNextIndex(ip, leaderLastIndex);
-            g_stateHelper.SetMatchIndex(ip, leaderLastIndex);
-            g_nodeList[ip] = make_pair(FOLLOWER, 
-                                            Raft::NewStub(grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
+            g_stateHelper.SetNextIndex(raftIp, leaderLastIndex);
+            g_stateHelper.SetMatchIndex(raftIp, leaderLastIndex);
+            g_nodeList[raftIp] = make_pair(FOLLOWER, 
+                                            Raft::NewStub(grpc::CreateChannel(raftIp, grpc::InsecureChannelCredentials())));
         }
         // old node, update identity
         else
         {
-            g_nodeList[ip].first = FOLLOWER;
+            g_nodeList[raftIp].first = FOLLOWER;
         }
 
         // TODECIDE: Should we delete nodes?
@@ -194,9 +194,11 @@ void LBNodeCommClient::updateFollowersInNodeList(AssertLeadershipReply *reply)
 /*
 *   @brief Created a stub to communicate with the LB
 */
-LBNodeCommClient::LBNodeCommClient(string _lb_addr) 
+LBNodeCommClient::LBNodeCommClient(string kvIp, string raftIp, string lb_addr) 
 {
-    stub_ = LBNodeComm::NewStub(grpc::CreateChannel(_lb_addr, grpc::InsecureChannelCredentials()));
+    _kvIp = kvIp;
+    _raftIp = raftIp;
+    stub_ = LBNodeComm::NewStub(grpc::CreateChannel(lb_addr, grpc::InsecureChannelCredentials()));
 }
 
 /*
@@ -212,7 +214,8 @@ void LBNodeCommClient::SendHeartBeat()
 
     HeartBeatReply reply;
     HeartBeatRequest request;
-    request.set_ip(serverImpl.GetMyIp());
+    request.set_raft_ip(_raftIp);
+    request.set_kv_ip(_kvIp);
 
     while(1) 
     {
@@ -267,11 +270,10 @@ void LBNodeCommClient::InvokeAssertLeadership()
 *
 *   @param args to be used as lb address 
 */
-void StartHB(char* args) 
+void StartHB(string kvIp, string raftIp, string lb_addr) 
 {
-    string lb_addr = string((char *) args);
     dbgprintf("[DEBUG] lb_addr = %s\n", lb_addr.c_str());
-    lBNodeCommClient = new LBNodeCommClient(lb_addr); 
+    lBNodeCommClient = new LBNodeCommClient(kvIp, raftIp, lb_addr); 
     lBNodeCommClient->SendHeartBeat();
 
     //return;
@@ -355,24 +357,25 @@ void RaftServer::BuildSystemStateFromHBReply(HeartBeatReply reply)
     for (int i = 0; i < reply.node_data_size(); i++)
     {
         auto nodeData = reply.node_data(i);
-        dbgprintf("[DEBUG] nodeData.ip(): %s \n", nodeData.ip().c_str());
+        string raftIp = nodeData.raft_ip();
+        dbgprintf("[DEBUG] nodeData.ip(): %s \n", raftIp.c_str());
 
-        if(g_nodeList.count(nodeData.ip()) == 0)
+        if(g_nodeList.count(raftIp) == 0)
         {
             if(g_stateHelper.GetIdentity() == LEADER)
             {
                 int leaderLastIndex = g_stateHelper.GetLogLength() - 1;
-                g_stateHelper.SetNextIndex(nodeData.ip(), leaderLastIndex + 1);
-                g_stateHelper.SetMatchIndex(nodeData.ip(), leaderLastIndex);
+                g_stateHelper.SetNextIndex(raftIp, leaderLastIndex + 1);
+                g_stateHelper.SetMatchIndex(raftIp, leaderLastIndex);
             }
 
 
-            g_nodeList[nodeData.ip()] = make_pair(nodeData.identity(), 
-                                            Raft::NewStub(grpc::CreateChannel(getRaftIp(nodeData.ip()), grpc::InsecureChannelCredentials())));
+            g_nodeList[raftIp] = make_pair(nodeData.identity(), 
+                                            Raft::NewStub(grpc::CreateChannel(getRaftIp(raftIp), grpc::InsecureChannelCredentials())));
         }
         else
         {
-            g_nodeList[nodeData.ip()].first = nodeData.identity();
+            g_nodeList[raftIp].first = nodeData.identity();
         }
     }
 }
@@ -987,17 +990,17 @@ void RunServer(string ip) {
 }
 
 /*
-*   @usage: ./server <my ip with port>  <lb ip>
+*   @usage: ./server <my ip with port for kv>  <ip with port for raft>  <lb ip>
 */
 int main(int argc, char **argv) 
 {
     // init
     g_stateHelper.SetIdentity(FOLLOWER);
-    serverImpl.SetMyIp(argv[1]);
+    serverImpl.SetMyIp(argv[2]);
     
     std::thread(RunKeyValueServer, argv[1]).detach();
-    std::thread(StartHB, argv[2]).detach();
-    std::thread(RunServer, argv[1]).detach();
+    std::thread(StartHB, argv[1], argv[2], argv[3]).detach();
+    std::thread(RunServer, argv[2]).detach();
     
     // Keep this loop, so that the program doesn't return
     while(1) {

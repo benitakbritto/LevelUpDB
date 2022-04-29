@@ -9,7 +9,8 @@ service LBNodeComm {
 
 message HeartBeatRequest {
     uint32 identity = 1;
-    string ip = 2;
+    string raft_ip = 2;
+    string kv_ip = 3;
 }
 
 message HeartBeatReply {
@@ -17,7 +18,7 @@ message HeartBeatReply {
 }
 
 message NodeData {
-    string ip = 1;
+    string raft_ip = 1;
     uint32 identity = 2;
 }
 
@@ -27,9 +28,9 @@ message AssertLeadershipRequest {
 }
 
 message AssertLeadershipReply {
-    repeated FollowerIP follower_ip = 1;
+    repeated FollowerMetadata follower_meta = 1;
 }
 
-message FollowerIP {
-    string ip = 1;
+message FollowerMetadata {
+    string raft_ip = 1;
 }

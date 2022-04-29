@@ -46,8 +46,8 @@ private:
   atomic<int> _votesGained;
   int _electionTimeout;
 
-  int _minElectionTimeout = 15000;
-  int _maxElectionTimeout = 100000;
+  int _minElectionTimeout = 5000;
+  int _maxElectionTimeout = 20000;
   int _heartbeatInterval = 50;
 
   void setAlarm(int after_us);
