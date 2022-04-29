@@ -372,7 +372,8 @@ public:
         }
 
         cout << "[ERROR]: stream broke" << endl;
-        eraseNode(ip);
+        // Do not delete node
+        // eraseNode(ip);
 
         return Status::OK;
     }
