@@ -1019,6 +1019,7 @@ void RunRaftServer(string ip) {
 int main(int argc, char **argv) 
 {
     // init
+    g_stateHelper = *(new StateHelper(argv[1]));
     g_stateHelper.SetIdentity(FOLLOWER);
     serverImpl.SetMyIp(argv[1]);
    

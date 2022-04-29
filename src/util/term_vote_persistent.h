@@ -44,6 +44,7 @@ private:
     
 public:
     PersistentTermVote();
+    PersistentTermVote(string ip);
     void AddTerm(int term);
     void AddVotedFor(int term, string ip);
     vector<TVEntry> ParseLog();

@@ -1,12 +1,17 @@
 // TODO: Add to cmake
 #include "state_helper.h"
 
-
 StateHelper::StateHelper()
 {
-    Init();
+   
 }
 
+StateHelper::StateHelper(string ip)
+{
+    pTermVoteObj = *(new PersistentTermVote(ip));
+    pReplicatedLogObj = *(new PersistentReplicatedLog(ip));
+    Init();
+}
 
 /*
 *   @brief Get the current term from mem
