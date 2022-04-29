@@ -17,6 +17,7 @@ using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
+using grpc::StatusCode;
 using grpc::ServerReaderWriter; 
 using namespace kvstore;
 using namespace std;
@@ -57,12 +58,18 @@ private:
         return it->second.second;
     }
 
-    /* @brief get the stub for the leader ip
+    /* @brief get the stub for the leader ip if leader exists, else returns NULL
     * 
     * @return stub
     */
     KeyValueClient* getLeaderStub()
     {
+        if (g_nodeList.count(leaderIP) == 0)
+        {
+            cout << "[WARN] No leader in the system yet" << endl;
+            return NULL;
+        }
+
         return g_nodeList[leaderIP].second;
     }
 
@@ -89,7 +96,14 @@ private:
         {
             stub = getLeaderStub();
             dbgprintf("[DEBUG}: Calling stub for leader\n");
-            return stub->GetFromDB(*request, reply);
+            if (stub == NULL)
+            {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Leader not present");
+            }
+            else
+            {
+                return stub->GetFromDB(*request, reply);
+            }
         }
 
         else if (consistencyLevel == STRONG_MAJORITY)
@@ -207,8 +221,12 @@ private:
         dbgprintf("[DEBUG] %s: Entering function\n", __func__);
         dbgprintf("LeaderIP = %s\n", leaderIP.c_str());
         
-        KeyValueClient* stub = g_nodeList[leaderIP].second;
-        
+        KeyValueClient* stub = getLeaderStub();
+
+        if (stub == NULL)
+        {
+            return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Leader not present");
+        }
         return stub->PutToDB(*request, reply);
     } 
 
@@ -233,10 +251,10 @@ private:
     *   @param identity  
     *   @param ip 
     */
-    void registerNode(int identity, string ip) 
+    void registerNode(int identity, string kvIp, string raftIp) 
     {
-        g_nodeList[ip] = make_pair(identity,
-                    new KeyValueClient (grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
+        g_nodeList[raftIp] = make_pair(identity,
+                    new KeyValueClient (grpc::CreateChannel(kvIp, grpc::InsecureChannelCredentials())));
         
         dbgprintf("[DEBUG]: Length of g_nodeList at LB: %ld", g_nodeList.size());
     }
@@ -246,10 +264,10 @@ private:
     *
     *   @param ip 
     */
-    void eraseNode(string ip) 
+    void eraseNode(string raftIp) 
     {
-        g_nodeList.erase(ip);
-        dbgprintf("[DEBUG] %s: Removed ip %s, Length of g_nodeList at LB: %ld\n", __func__, ip.c_str(), g_nodeList.size());
+        g_nodeList.erase(raftIp);
+        dbgprintf("[DEBUG] %s: Removed ip %s, Length of g_nodeList at LB: %ld\n", __func__, raftIp.c_str(), g_nodeList.size());
     }
 
     /*
@@ -257,16 +275,16 @@ private:
     *
     *   @param ip 
     */
-    void setIdentityOfNode(string ip, int identity) 
+    void setIdentityOfNode(int identity, string kvIp, string raftIp) 
     {
-        if (g_nodeList.count(ip) == 0)
+        if (g_nodeList.count(raftIp) == 0)
         {
-            g_nodeList[ip] = make_pair(identity,
-                    new KeyValueClient (grpc::CreateChannel(ip, grpc::InsecureChannelCredentials())));
+            g_nodeList[raftIp] = make_pair(identity,
+                    new KeyValueClient (grpc::CreateChannel(kvIp, grpc::InsecureChannelCredentials())));
         }
         else
         {
-            g_nodeList[ip].first = identity;
+            g_nodeList[raftIp].first = identity;
         }
     }
 
@@ -281,7 +299,7 @@ private:
         for (auto& it: g_nodeList) 
         {
             nodeData = reply->add_node_data();
-            nodeData->set_ip(it.first);
+            nodeData->set_raft_ip(it.first);
             nodeData->set_identity(it.second.first);
         }
     }
@@ -293,11 +311,11 @@ private:
     */
     void setAssertLeadershipReply(AssertLeadershipReply* reply) 
     {
-        FollowerIP* nodeData;
+        FollowerMetadata* nodeData;
         for (auto& it: g_nodeList) 
         {
-            nodeData = reply->add_follower_ip();
-            nodeData->set_ip(it.first);
+            nodeData = reply->add_follower_meta();
+            nodeData->set_raft_ip(it.first);
         }
     }
 
@@ -319,7 +337,8 @@ public:
         HeartBeatReply reply;
 
         int identity;
-        string ip;
+        string raftIp;
+        string kvIp;
         bool registerFirstTime = true;
 
         while(1) 
@@ -328,20 +347,21 @@ public:
             {
                 break;
             }
-            dbgprintf("[INFO] %s: recv heartbeat from IP:[%s]\n", __func__, request.ip().c_str());
+            dbgprintf("[INFO] %s: recv heartbeat from IP:[%s]\n", __func__, request.raft_ip().c_str());
 
             identity = request.identity();
-            ip = request.ip();
+            raftIp = request.raft_ip();
+            kvIp = request.kv_ip();
 
             if(registerFirstTime) 
             {
-                dbgprintf("[DEBUG] %s: Registering node %s for the 1st time\n", __func__, ip.c_str());
-                registerNode(identity, ip);
+                dbgprintf("[DEBUG] %s: Registering node %s for the 1st time\n", __func__, raftIp.c_str());
+                registerNode(identity, kvIp, raftIp);
             }
 
             registerFirstTime = false;
                 
-            setIdentityOfNode(ip, identity);
+            setIdentityOfNode(identity, kvIp, raftIp);
 
             reply.Clear();
             setHeartbeatReply(&reply);
@@ -354,7 +374,8 @@ public:
         }
 
         cout << "[ERROR]: stream broke" << endl;
-        eraseNode(ip);
+        // Do not delete node
+        // eraseNode(raftIp);
 
         return Status::OK;
     }

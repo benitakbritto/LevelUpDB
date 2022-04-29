@@ -37,7 +37,6 @@ using kvstore::HeartBeatReply;
 
 class RaftServer final : public Raft::Service {
 private: 
-  unordered_map<string, AppendEntriesReply> _appendEntriesResponseMap;
   MutexMap _lockHelper;
   string _myIp;
 
@@ -46,8 +45,8 @@ private:
   atomic<int> _votesGained;
   int _electionTimeout;
 
-  int _minElectionTimeout = 15000;
-  int _maxElectionTimeout = 100000;
+  int _minElectionTimeout = 5000;
+  int _maxElectionTimeout = 20000;
   int _heartbeatInterval = 50;
 
   void setAlarm(int after_us);
@@ -57,7 +56,7 @@ private:
   void invokeRequestVote(string host);
   bool requestVote(Raft::Stub* stub);
   
-  void invokeAppendEntries(string node_ip);
+  void invokeAppendEntries(string node_ip, atomic<int>* successCount);
   void invokePeriodicAppendEntries();
 
   void becomeFollower();
@@ -78,14 +77,13 @@ public:
   void Run();
   void Wait();
   void ServerInit();
-  void ClearAppendEntriesMap();
-  void BroadcastAppendEntries();
-  bool ReceivedMajority();
+  void BroadcastAppendEntries(atomic<int>* successCount);
+  bool ReceivedMajority(atomic<int>* successCount);
   void ExecuteCommands(int start, int end);
   void BuildSystemStateFromHBReply(HeartBeatReply reply);
 
-  grpc::Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply);
-  grpc::Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply);
+  grpc::Status AppendEntries(ServerContext* context, const AppendEntriesRequest* request, AppendEntriesReply *reply) override;
+  grpc::Status ReqVote(ServerContext* context, const ReqVoteRequest* request, ReqVoteReply* reply) override;
 
 };
 

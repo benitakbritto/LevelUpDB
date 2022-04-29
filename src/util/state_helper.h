@@ -60,6 +60,8 @@ private:
 public:
     StateHelper();
 
+    StateHelper(string ip);
+
     void Init();
 
     // Persistent - Term Vote

@@ -17,7 +17,7 @@ Status KeyValueClient::GetFromDB(const GetRequest request, GetReply* reply)
     return status;
 }
 
-Status KeyValueClient::PutToDB(PutRequest request, PutReply* reply)
+Status KeyValueClient::PutToDB(const PutRequest request, PutReply* reply)
 {
     dbgprintf("Reached client\n");
     

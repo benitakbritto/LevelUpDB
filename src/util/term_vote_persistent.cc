@@ -2,9 +2,11 @@
 // TODO: Add to cmake
 #include "term_vote_persistent.h"
 
-PersistentTermVote::PersistentTermVote()
+PersistentTermVote::PersistentTermVote() {}
+
+PersistentTermVote::PersistentTermVote(string ip)
 {
-    string file_path = TERM_VOTE_PATH + to_string(getpid());
+    string file_path = TERM_VOTE_PATH + ip;
     fd = open(file_path.c_str(), O_WRONLY |  O_APPEND | O_CREAT, 0666);
 
     if (fd == -1) 

@@ -3,14 +3,18 @@
 
 #include "replicated_log_persistent.h"
 #include <sys/types.h>
-#include <unistd.h>
+
+/*
+*   @brief Default constructor
+*/
+PersistentReplicatedLog::PersistentReplicatedLog() {}
 
 /*
 *   @brief Gets file descriptor of log file
 */
-PersistentReplicatedLog::PersistentReplicatedLog()
+PersistentReplicatedLog::PersistentReplicatedLog(string ip)
 {
-    string log_file_path = REPLICATED_LOG_PATH + to_string(getpid());
+    string log_file_path = REPLICATED_LOG_PATH + ip;
     fd = open(log_file_path.c_str(), O_WRONLY | O_CREAT, 0666);
 
     if (fd == -1) 

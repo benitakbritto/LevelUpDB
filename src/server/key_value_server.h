@@ -65,8 +65,8 @@ using namespace std;
 class KeyValueOpsServiceImpl final : public KeyValueOps::Service 
 {
 public:
-    Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply);
-    Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply);
+    Status GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) override;
+    Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override;
 };
 
 
