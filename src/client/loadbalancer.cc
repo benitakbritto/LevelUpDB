@@ -8,7 +8,7 @@
 #include "client.h"
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
-#include "util/common.h"
+#include "../util/common.h"
 
 /******************************************************************************
  * NAMESPACES
