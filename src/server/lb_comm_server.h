@@ -66,12 +66,14 @@ class LBNodeCommClient
 {
 private:
     unique_ptr<LBNodeComm::Stub> stub_;
+    string _raftIp;
+    string _kvIp;
 
     void updateFollowersInNodeList(AssertLeadershipReply *reply);
 
 public:
     LBNodeCommClient();
-    LBNodeCommClient(string _lb_addr);
+    LBNodeCommClient(string kvIp, string raftIp, string _lb_addr);
 
     void SendHeartBeat();
     void InvokeAssertLeadership();

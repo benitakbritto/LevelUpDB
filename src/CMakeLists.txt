@@ -139,8 +139,9 @@ target_link_libraries(state_helper
     replicated_log_volatile
     state_volatile)
 
-# TODO: Comment out later - verifying if leveldb is functioning or not
-add_executable(levelDBWrapper "util/levelDBWrapper.cc")
+# Uncomment if you need an executable to test and comment out the next line
+# add_executable(levelDBWrapper "util/levelDBWrapper.cc")
+add_library(levelDBWrapper "util/levelDBWrapper.cc")
 target_link_libraries(levelDBWrapper  
     ${LEVELDB_LIBRARY}
     ${SNAPPY_LIBRARY})
@@ -156,6 +157,7 @@ foreach(_target
     keyvalueops_grpc_proto
     lb_grpc_proto
     raft_grpc_proto
+    levelDBWrapper
     ${LEVELDB_LIBRARY}
     ${SNAPPY_LIBRARY}
     ${_REFLECTION}

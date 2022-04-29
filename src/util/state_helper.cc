@@ -1,12 +1,17 @@
 // TODO: Add to cmake
 #include "state_helper.h"
 
-
 StateHelper::StateHelper()
 {
-    Init();
+   
 }
 
+StateHelper::StateHelper(string ip)
+{
+    pTermVoteObj = *(new PersistentTermVote(ip));
+    pReplicatedLogObj = *(new PersistentReplicatedLog(ip));
+    Init();
+}
 
 /*
 *   @brief Get the current term from mem
@@ -78,6 +83,7 @@ void StateHelper::Append(int term, string key, string value)
 *   @param start index
 *   @param entries (term, key, value
 */
+// TODO: Make cleaner - append is being called in Insert
 void StateHelper::Insert(int start_index, vector<Entry> &entries)
 {
     dbgprintf("[DEBUG]: Insert - Entering function\n");
@@ -85,7 +91,21 @@ void StateHelper::Insert(int start_index, vector<Entry> &entries)
     int index = 0;
 
     index = start_index;
+    dbgprintf("[DEBUG] %s: start_index = %d\n", __func__, start_index);
+    dbgprintf("[DEBUG] %s: GetLogLength = %d\n", __func__, GetLogLength());
+
+    if(index==GetLogLength())
+    {
+        dbgprintf("[DEBUG] %s: Calling append\n", __func__);
+        for(auto val : entries)
+        {
+            Append(val.term, val.key, val.value);
+        }
+        return;
+    }
     offset = vReplicatedLogObj.GetOffset(start_index);
+    dbgprintf("[DEBUG] %s: offset = %d\n", __func__, offset);
+    
     if (offset == -1)
     {
         dbgprintf("[DEBUG]: Insert - offset == -1\n");
@@ -107,6 +127,7 @@ void StateHelper::Insert(int start_index, vector<Entry> &entries)
         vReplicatedLogObj.Insert(index, val.term, val.key, val.value, offset);
         
         offset = pReplicatedLogObj.GetCurrentFileOffset();
+        dbgprintf("[DEBUG] %s: offset (in loop) = %d\n", __func__, offset);
         index += 1;
     }
 
