@@ -29,9 +29,40 @@ using namespace std;
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
-unordered_map<string, pair<int, KeyValueClient*>> g_nodeList; // <ip: <id, stub>>
+
+struct NodeMetadata
+{
+    string kvIp;
+    KeyValueClient* kvStub;
+    int identity;
+};
+
+typedef NodeMetadata NodeMeta;
+
+unordered_map<string, NodeMeta> g_nodeList;
+// unordered_map<string, pair<int, KeyValueClient*>> g_nodeList;
 string leaderIP;
 int g_currentTerm = 0;
+
+/******************************************************************************
+ * DECLARATION
+ *****************************************************************************/
+/*
+*   @brief Helper
+*/
+
+class Helper {
+    public:
+        void setNodeMetadata( int _identity, string _kvIp, string _raftIp)
+        {
+            NodeMeta nodeMeta;
+            nodeMeta.kvIp = _kvIp;
+            nodeMeta.kvStub = new KeyValueClient(grpc::CreateChannel(_kvIp, grpc::InsecureChannelCredentials()));
+            nodeMeta.identity = _identity;
+            
+            g_nodeList[_raftIp] = nodeMeta;
+        }
+};
 
 /******************************************************************************
  * DECLARATION
@@ -55,7 +86,7 @@ private:
         auto it = g_nodeList.begin();
         advance(it, idx);
         dbgprintf("[DEBUG] %s: Routing to %s\n", __func__, (it->first).c_str());
-        return it->second.second;
+        return it->second.kvStub;
     }
 
     /* @brief get the stub for the leader ip if leader exists, else returns NULL
@@ -69,8 +100,7 @@ private:
             cout << "[WARN] No leader in the system yet" << endl;
             return NULL;
         }
-
-        return g_nodeList[leaderIP].second;
+        return g_nodeList[leaderIP].kvStub;
     }
 
     // TODO: Reads should go to leader for strong consistency
@@ -111,7 +141,7 @@ private:
             // iterate over g_nodeList
             for(auto& node: g_nodeList) 
             {
-                std::thread(&KeyValueService::invokeGetFromDB, this, node.second.second, request, reply).detach();
+                std::thread(&KeyValueService::invokeGetFromDB, this, node.second.kvStub, request, reply).detach();
             }
 
             do{
@@ -244,7 +274,7 @@ public:
 class LBNodeCommService final: public LBNodeComm::Service 
 {
 private:
-
+    Helper _helper;
     /*
     *   @brief Save server node information
     *
@@ -253,9 +283,7 @@ private:
     */
     void registerNode(int identity, string kvIp, string raftIp) 
     {
-        g_nodeList[raftIp] = make_pair(identity,
-                    new KeyValueClient (grpc::CreateChannel(kvIp, grpc::InsecureChannelCredentials())));
-        
+        _helper.setNodeMetadata(identity, kvIp, raftIp);
         dbgprintf("[DEBUG]: Length of g_nodeList at LB: %ld", g_nodeList.size());
     }
 
@@ -279,12 +307,11 @@ private:
     {
         if (g_nodeList.count(raftIp) == 0)
         {
-            g_nodeList[raftIp] = make_pair(identity,
-                    new KeyValueClient (grpc::CreateChannel(kvIp, grpc::InsecureChannelCredentials())));
+            _helper.setNodeMetadata(identity, kvIp, raftIp);
         }
         else
         {
-            g_nodeList[raftIp].first = identity;
+            g_nodeList[raftIp].identity = identity;
         }
     }
 
@@ -300,7 +327,7 @@ private:
         {
             nodeData = reply->add_node_data();
             nodeData->set_raft_ip(it.first);
-            nodeData->set_identity(it.second.first);
+            nodeData->set_identity(it.second.identity);
         }
     }
 
@@ -392,7 +419,8 @@ public:
     {
         dbgprintf("[DEBUG] %s: Entering function\n", __func__);
         dbgprintf("[DEBUG] %s: Previous leaderIP = %s\n", __func__, leaderIP.c_str());
-        
+        string leaderRaftIp;
+        string leaderKvIp;
         // Only update the leader if it is from the right term
         if (g_currentTerm < request->term())
         {
@@ -401,20 +429,21 @@ public:
             // set previous leader to follower
             if (g_nodeList.count(leaderIP) != 0)
             {
-                g_nodeList[leaderIP].first = FOLLOWER;
+                g_nodeList[leaderIP].identity = FOLLOWER;
             }
 
             // set new leader
-            leaderIP = request->leader_ip();
-            dbgprintf("[DEBUG] %s: New leaderIP = %s\n", __func__, leaderIP.c_str());
-            if (g_nodeList.count(leaderIP) == 0)
+            leaderRaftIp = request->leader_raft_ip();
+            leaderKvIp = request->leader_kv_ip();
+
+            dbgprintf("[DEBUG] %s: New leaderIP = %s\n", __func__, leaderRaftIp.c_str());
+            if (g_nodeList.count(leaderRaftIp) == 0)
             {
-                g_nodeList[leaderIP] = make_pair(LEADER,
-                        new KeyValueClient (grpc::CreateChannel(leaderIP, grpc::InsecureChannelCredentials())));
+                _helper.setNodeMetadata(LEADER, leaderKvIp, leaderRaftIp);
             }
             else
             {
-                g_nodeList[leaderIP].first = LEADER;
+                g_nodeList[leaderRaftIp].identity = LEADER;
             }       
             setAssertLeadershipReply(reply);
         }
@@ -480,4 +509,6 @@ int main (int argc, char *argv[]){
 
     pthread_join(client_server_t, NULL);
     pthread_join(node_server_t, NULL);
+    
+    return 0;
 }
