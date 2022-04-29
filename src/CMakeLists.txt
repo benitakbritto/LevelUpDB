@@ -107,7 +107,7 @@ target_link_libraries(keyvalueops_grpc_proto
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
-add_library(client_lib "client.cc")
+add_library(client_lib "client/client.cc")
 target_link_libraries(client_lib 
   keyvalueops_grpc_proto
 )
@@ -116,7 +116,7 @@ target_link_libraries(client_lib
 foreach(_target
   keyvalue_client
   loadbalancer)
-  add_executable(${_target} "${_target}.cc")
+  add_executable(${_target} "./client/${_target}.cc")
   target_link_libraries(${_target}
     keyvalueops_grpc_proto
     lb_grpc_proto

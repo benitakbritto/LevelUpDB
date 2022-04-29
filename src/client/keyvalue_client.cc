@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 #include <grpcpp/grpcpp.h>
-#include "util/common.h"
+#include "../util/common.h"
 #ifdef BAZEL_BUILD
 #include "examples/protos/keyvalueops.grpc.pb.h"
 #else

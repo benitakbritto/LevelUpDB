@@ -8,7 +8,7 @@
 #include "client.h"
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
-#include "util/common.h"
+#include "../util/common.h"
 
 /******************************************************************************
  * NAMESPACES
@@ -17,6 +17,7 @@ using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
+using grpc::StatusCode;
 using grpc::ServerReaderWriter; 
 using namespace kvstore;
 using namespace std;
@@ -57,12 +58,18 @@ private:
         return it->second.second;
     }
 
-    /* @brief get the stub for the leader ip
+    /* @brief get the stub for the leader ip if leader exists, else returns NULL
     * 
     * @return stub
     */
     KeyValueClient* getLeaderStub()
     {
+        if (g_nodeList.count(leaderIP) == 0)
+        {
+            cout << "[WARN] No leader in the system yet" << endl;
+            return NULL;
+        }
+
         return g_nodeList[leaderIP].second;
     }
 
@@ -89,7 +96,14 @@ private:
         {
             stub = getLeaderStub();
             dbgprintf("[DEBUG}: Calling stub for leader\n");
-            return stub->GetFromDB(*request, reply);
+            if (stub == NULL)
+            {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Leader not present");
+            }
+            else
+            {
+                return stub->GetFromDB(*request, reply);
+            }
         }
 
         else if (consistencyLevel == STRONG_MAJORITY)
@@ -207,8 +221,12 @@ private:
         dbgprintf("[DEBUG] %s: Entering function\n", __func__);
         dbgprintf("LeaderIP = %s\n", leaderIP.c_str());
         
-        KeyValueClient* stub = g_nodeList[leaderIP].second;
-        
+        KeyValueClient* stub = getLeaderStub();
+
+        if (stub == NULL)
+        {
+            return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Leader not present");
+        }
         return stub->PutToDB(*request, reply);
     } 
 
@@ -354,7 +372,8 @@ public:
         }
 
         cout << "[ERROR]: stream broke" << endl;
-        eraseNode(ip);
+        // Do not delete node
+        // eraseNode(ip);
 
         return Status::OK;
     }
