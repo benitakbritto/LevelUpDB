@@ -41,7 +41,7 @@ typedef NodeMetadata NodeMeta;
 
 unordered_map<string, NodeMeta> g_nodeList;
 // unordered_map<string, pair<int, KeyValueClient*>> g_nodeList;
-string leaderIP;
+string g_leaderIP;
 int g_currentTerm = 0;
 
 /******************************************************************************
@@ -53,8 +53,9 @@ int g_currentTerm = 0;
 
 class Helper {
     public:
-        void setNodeMetadata( int _identity, string _kvIp, string _raftIp)
+        void setNodeMetadata(int _identity, string _kvIp, string _raftIp)
         {
+            dbgprintf("[DEBUG] set node meta to id: %d, kvIp: %s, raftIp: %s \n", _identity, _kvIp.c_str(), _raftIp.c_str());
             NodeMeta nodeMeta;
             nodeMeta.kvIp = _kvIp;
             nodeMeta.kvStub = new KeyValueClient(grpc::CreateChannel(_kvIp, grpc::InsecureChannelCredentials()));
@@ -95,12 +96,12 @@ private:
     */
     KeyValueClient* getLeaderStub()
     {
-        if (g_nodeList.count(leaderIP) == 0)
+        if (g_nodeList.count(g_leaderIP) == 0)
         {
             cout << "[WARN] No leader in the system yet" << endl;
             return NULL;
         }
-        return g_nodeList[leaderIP].kvStub;
+        return g_nodeList[g_leaderIP].kvStub;
     }
 
     // TODO: Reads should go to leader for strong consistency
@@ -249,7 +250,7 @@ private:
     Status PutToDB(ServerContext* context,const PutRequest* request, PutReply* reply) override 
     {
         dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-        dbgprintf("LeaderIP = %s\n", leaderIP.c_str());
+        dbgprintf("g_leaderIP = %s\n", g_leaderIP.c_str());
         
         KeyValueClient* stub = getLeaderStub();
 
@@ -418,7 +419,7 @@ public:
     Status AssertLeadership(ServerContext* context,const AssertLeadershipRequest* request, AssertLeadershipReply* reply) override
     {
         dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-        dbgprintf("[DEBUG] %s: Previous leaderIP = %s\n", __func__, leaderIP.c_str());
+        dbgprintf("[DEBUG] %s: Previous g_leaderIP = %s\n", __func__, g_leaderIP.c_str());
         string leaderRaftIp;
         string leaderKvIp;
         // Only update the leader if it is from the right term
@@ -427,17 +428,19 @@ public:
             g_currentTerm = request->term();
 
             // set previous leader to follower
-            if (g_nodeList.count(leaderIP) != 0)
+            if (g_nodeList.count(g_leaderIP) != 0)
             {
-                g_nodeList[leaderIP].identity = FOLLOWER;
+                g_nodeList[g_leaderIP].identity = FOLLOWER;
             }
 
             // set new leader
             leaderRaftIp = request->leader_raft_ip();
             leaderKvIp = request->leader_kv_ip();
 
-            dbgprintf("[DEBUG] %s: New leaderIP = %s\n", __func__, leaderRaftIp.c_str());
-            if (g_nodeList.count(leaderRaftIp) == 0)
+            g_leaderIP = leaderRaftIp; // set global leader ip 
+
+            dbgprintf("[DEBUG] %s: New g_leaderIP = %s\n", __func__, g_leaderIP.c_str());
+            if (g_nodeList.count(g_leaderIP) == 0)
             {
                 _helper.setNodeMetadata(LEADER, leaderKvIp, leaderRaftIp);
             }

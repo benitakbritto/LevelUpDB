@@ -671,6 +671,7 @@ void RaftServer::becomeLeader()
     setMatchIndexToLeaderLastIndex();
 
     // inform LB
+    dbgprintf("[DEBUG]: About to invoke AssertLeadership \n");
     lBNodeCommClient->InvokeAssertLeadership();
 
     // to maintain leadership
