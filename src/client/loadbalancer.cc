@@ -52,8 +52,10 @@ int g_currentTerm = 0;
 */
 
 class Helper {
+    private:
+
     public:
-        void setNodeMetadata(int _identity, string _kvIp, string _raftIp)
+        void SetNodeMetadata(int _identity, string _kvIp, string _raftIp)
         {
             dbgprintf("[DEBUG] set node meta to id: %d, kvIp: %s, raftIp: %s \n", _identity, _kvIp.c_str(), _raftIp.c_str());
             NodeMeta nodeMeta;
@@ -62,6 +64,29 @@ class Helper {
             nodeMeta.identity = _identity;
             
             g_nodeList[_raftIp] = nodeMeta;
+        }
+
+        string GetServerIPToRouteTo(int index)
+        {
+            int idx = index % (g_nodeList.size());
+            auto it = g_nodeList.begin();
+            advance(it, idx);
+            dbgprintf("[DEBUG] %s: Routing to %s\n", __func__, (it->first).c_str());
+            return it->first;
+        }
+
+        string GetIpForResAlloc(string addr) 
+        {
+            int colon = addr.find(":");
+            return addr.substr(colon+1) + RES_ALLOC_PORT_STR; 
+        }
+
+        bool IsNodeAtIndexLeader(int index)
+        {
+            int idx = index % (g_nodeList.size());
+            auto it = g_nodeList.begin();
+            advance(it, idx);
+            return (it->second.identity == LEADER);
         }
 };
 
@@ -74,21 +99,16 @@ class Helper {
 class KeyValueService final : public KeyValueOps::Service 
 {
 private:
-    int idx = 0; 
+    int _index = 0; 
     unordered_map<string, int> _valCountMap; // <value:frequency> map
+    Helper _helper;
+
     /*
     *   @brief Gets server ip using round robin
     *
     *   @return Server stub
     */
-    KeyValueClient* getServerIPToRouteTo()
-    {
-        idx = (++idx) % (g_nodeList.size());
-        auto it = g_nodeList.begin();
-        advance(it, idx);
-        dbgprintf("[DEBUG] %s: Routing to %s\n", __func__, (it->first).c_str());
-        return it->second.kvStub;
-    }
+   
 
     /* @brief get the stub for the leader ip if leader exists, else returns NULL
     * 
@@ -154,7 +174,9 @@ private:
             return Status::OK;
         }
         else { 
-            stub = getServerIPToRouteTo();
+            _index = _index + 1;
+            string raftIp = _helper.GetServerIPToRouteTo(_index);
+            KeyValueClient* stub = g_nodeList[raftIp].kvStub;
             return stub->GetFromDB(*request, reply);
         }    
     }
@@ -276,6 +298,7 @@ class LBNodeCommService final: public LBNodeComm::Service
 {
 private:
     Helper _helper;
+    int _index; // for round-robin on add node
     /*
     *   @brief Save server node information
     *
@@ -284,7 +307,7 @@ private:
     */
     void registerNode(int identity, string kvIp, string raftIp) 
     {
-        _helper.setNodeMetadata(identity, kvIp, raftIp);
+        _helper.SetNodeMetadata(identity, kvIp, raftIp);
         dbgprintf("[DEBUG]: Length of g_nodeList at LB: %ld", g_nodeList.size());
     }
 
@@ -308,7 +331,7 @@ private:
     {
         if (g_nodeList.count(raftIp) == 0)
         {
-            _helper.setNodeMetadata(identity, kvIp, raftIp);
+            _helper.SetNodeMetadata(identity, kvIp, raftIp);
         }
         else
         {
@@ -416,7 +439,7 @@ public:
     *   @param reply
     *   @return gRPC status
     */
-    Status AssertLeadership(ServerContext* context,const AssertLeadershipRequest* request, AssertLeadershipReply* reply) override
+    Status AssertLeadership(ServerContext* context, const AssertLeadershipRequest* request, AssertLeadershipReply* reply) override
     {
         dbgprintf("[DEBUG] %s: Entering function\n", __func__);
         dbgprintf("[DEBUG] %s: Previous g_leaderIP = %s\n", __func__, g_leaderIP.c_str());
@@ -442,7 +465,7 @@ public:
             dbgprintf("[DEBUG] %s: New g_leaderIP = %s\n", __func__, g_leaderIP.c_str());
             if (g_nodeList.count(g_leaderIP) == 0)
             {
-                _helper.setNodeMetadata(LEADER, leaderKvIp, leaderRaftIp);
+                _helper.SetNodeMetadata(LEADER, leaderKvIp, leaderRaftIp);
             }
             else
             {
@@ -456,6 +479,51 @@ public:
         }
         dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
         return Status::OK;
+    }
+
+    /*
+    *   @brief adds another server by calling resAlloc stub
+    *
+    *   @param context
+    *   @param request 
+    *   @param reply
+    * 
+    *   @return gRPC status
+    */
+    Status AddServer(ServerContext* context, const AddServerRequest* request, AddServerReply* reply) override 
+    {
+        _index = _index + 1; 
+        string raftIp = _helper.GetServerIPToRouteTo(_index);   
+        string resAllocIP = _helper.GetIpForResAlloc(raftIp);
+        auto stub = LBNodeComm::NewStub(grpc::CreateChannel(resAllocIP, grpc::InsecureChannelCredentials()));
+        
+        ClientContext* clientContext;
+        return stub->AddServer(clientContext, *request, reply);
+    }
+
+    /*
+    *   @brief deletes a server by calling resAlloc stub
+    *
+    *   @param context
+    *   @param request 
+    *   @param reply
+    * 
+    *   @return gRPC status
+    */
+    Status DeleteServer(ServerContext* context, const DeleteServerRequest* request, DeleteServerReply* reply) override 
+    {
+        _index = _index + 1; 
+        if(_helper.IsNodeAtIndexLeader(_index))
+        {
+            _index = _index + 1; 
+        }
+        // TODO: Check if index is that of leader
+        string raftIp = _helper.GetServerIPToRouteTo(_index);   
+        string resAllocIP = _helper.GetIpForResAlloc(raftIp);
+        auto stub = LBNodeComm::NewStub(grpc::CreateChannel(resAllocIP, grpc::InsecureChannelCredentials()));
+        
+        ClientContext* clientContext;
+        return stub->DeleteServer(clientContext, *request, reply);
     }
 
 };

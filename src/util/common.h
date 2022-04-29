@@ -23,7 +23,8 @@ enum ConsistencyLevel { STRONG_LEADER, STRONG_MAJORITY, EVENTUAL };
 #define LEADER_STR                  "LEADER"
 #define FOLLOWER_STR                "FOLLOWER"
 #define RETRY_TIME_START             1                                     
-#define RETRY_TIME_MULTIPLIER        2                                    
+#define RETRY_TIME_MULTIPLIER        2    
+#define RES_ALLOC_PORT_STR           "50000"                                
 
 /******************************************************************************
  * NAMESPACES
