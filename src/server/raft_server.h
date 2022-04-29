@@ -56,7 +56,7 @@ private:
   void invokeRequestVote(string host);
   bool requestVote(Raft::Stub* stub);
   
-  void invokeAppendEntries(string node_ip, atomic<int>* successCount);
+  void invokeAppendEntries(string node_ip, atomic<int>* successCount, int logLengthForBroadcast);
   void invokePeriodicAppendEntries();
 
   void becomeFollower();
@@ -66,7 +66,7 @@ private:
   void setNextIndexToLeaderLastIndex();
   void setMatchIndexToLeaderLastIndex();
 
-  AppendEntriesRequest prepareRequestForAppendEntries(string followerip, int nextIndex);
+  AppendEntriesRequest prepareRequestForAppendEntries(string followerip, int nextIndex, int logLengthForBroadcast);
 
   int GetMajorityCount();
  
