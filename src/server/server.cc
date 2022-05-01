@@ -481,12 +481,12 @@ void RaftServer::invokeRequestVote(string nodeIp)
 *
 *   @param followerip, nextIndex
 */  
-AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string followerip, int nextIndex) 
+AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string followerip, int nextIndex, int logLengthForBroadcast) 
 {
     dbgprintf("[DEBUG] %s: Entering function with nextIndex = %d\n", __func__, nextIndex);
     AppendEntriesRequest request;
 
-    int logLength = g_stateHelper.GetLogLength();
+    //int logLength = g_stateHelper.GetLogLength();
     int prevLogIndex = g_stateHelper.GetMatchIndex(followerip);
     int prevLogTerm = g_stateHelper.GetTermAtIndex(prevLogIndex);
 
@@ -496,7 +496,7 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
     request.set_prev_log_term(prevLogTerm);
     request.set_leader_commit_index(g_stateHelper.GetCommitIndex());
 
-    for(int i = nextIndex; i < logLength; i++) 
+    for(int i = nextIndex; i < logLengthForBroadcast; i++) 
     {
         int term = g_stateHelper.GetTermAtIndex(i);
         string key = g_stateHelper.GetKeyAtIndex(i);
@@ -508,7 +508,7 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
         data->set_value(value);
     }
 
-    dbgprintf("[DEBUG] %s: logLength = %d | prevLogIndex = %d | prevLogTerm = %d | nextIndex = %d | Entries size = %d \n", __func__, logLength, prevLogIndex, prevLogTerm, nextIndex, request.log_entry_size());
+    dbgprintf("[DEBUG] %s: logLength = %d | prevLogIndex = %d | prevLogTerm = %d | nextIndex = %d | Entries size = %d \n", __func__, logLengthForBroadcast, prevLogIndex, prevLogTerm, nextIndex, request.log_entry_size());
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
     return request;
@@ -521,7 +521,7 @@ AppendEntriesRequest RaftServer::prepareRequestForAppendEntries (string follower
 *
 *   @param followerip
 */         
-void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCount) 
+void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCount, int logLengthForBroadcast) 
 {
     dbgprintf("[DEBUG] %s: Entering function with followerIp = %s\n", __func__, followerIp.c_str());
 
@@ -540,12 +540,11 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
     bool shouldRetry = false;
 
     nextIndex = g_stateHelper.GetNextIndex(followerIp);
-    matchIndex = g_stateHelper.GetMatchIndex(followerIp);
 
     // Retry the RPC until log is consistent
     do 
     {
-        request = prepareRequestForAppendEntries(followerIp, nextIndex);
+        request = prepareRequestForAppendEntries(followerIp, nextIndex, logLengthForBroadcast);
         dbgprintf("[DEBUG] %s: Checking if request is intact. Leader IP = %s\n", __func__, request.leader_id().c_str());
         auto stub = g_nodeList[followerIp].second.get();
         // Retry RPC indefinitely if follower is down
@@ -638,11 +637,12 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 void RaftServer::BroadcastAppendEntries(atomic<int>* successCount) 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+    int logLengthForThisBroadcast = g_stateHelper.GetLogLength();
     for (auto& node: g_nodeList) 
     {
         if (node.first != _myIp) 
         {
-            thread(&RaftServer::invokeAppendEntries, this, node.first, successCount).detach();
+            thread(&RaftServer::invokeAppendEntries, this, node.first, successCount, logLengthForThisBroadcast).detach();
         }
     }
     
