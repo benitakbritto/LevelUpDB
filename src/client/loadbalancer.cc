@@ -5,6 +5,7 @@
 #include <grpcpp/grpcpp.h>
 #include "keyvalueops.grpc.pb.h"
 #include "lb.grpc.pb.h"
+#include "resalloc.grpc.pb.h"
 #include "client.h"
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
@@ -44,15 +45,16 @@ unordered_map<string, NodeMeta> g_nodeList;
 string g_leaderIP;
 int g_currentTerm = 0;
 
+
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
 /*
 *   @brief Helper
 */
-
 class Helper {
     private:
+        string _lbCommIp;
 
     public:
         void SetNodeMetadata(int _identity, string _kvIp, string _raftIp)
@@ -78,7 +80,7 @@ class Helper {
         string GetIpForResAlloc(string addr) 
         {
             int colon = addr.find(":");
-            return addr.substr(colon+1) + RES_ALLOC_PORT_STR; 
+            return addr.substr(0, colon+1) + RES_ALLOC_PORT_STR; 
         }
 
         bool IsNodeAtIndexLeader(int index)
@@ -88,8 +90,23 @@ class Helper {
             advance(it, idx);
             return (it->second.identity == LEADER);
         }
+
+        void SetLBCommIp(string ip)
+        {
+            _lbCommIp = ip;
+        }
+
+        string GetLBCommIp()
+        {
+            return _lbCommIp;
+        }
+
+        // TODO: GenerateKVIP()
+        // TODO: GenerateRaftIP()
 };
 
+
+Helper _helper; // TODO: Make better
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
@@ -297,7 +314,6 @@ public:
 class LBNodeCommService final: public LBNodeComm::Service 
 {
 private:
-    Helper _helper;
     int _index; // for round-robin on add node
     /*
     *   @brief Save server node information
@@ -480,52 +496,6 @@ public:
         dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
         return Status::OK;
     }
-
-    /*
-    *   @brief adds another server by calling resAlloc stub
-    *
-    *   @param context
-    *   @param request 
-    *   @param reply
-    * 
-    *   @return gRPC status
-    */
-    Status AddServer(ServerContext* context, const AddServerRequest* request, AddServerReply* reply) override 
-    {
-        _index = _index + 1; 
-        string raftIp = _helper.GetServerIPToRouteTo(_index);   
-        string resAllocIP = _helper.GetIpForResAlloc(raftIp);
-        auto stub = LBNodeComm::NewStub(grpc::CreateChannel(resAllocIP, grpc::InsecureChannelCredentials()));
-        
-        ClientContext* clientContext;
-        return stub->AddServer(clientContext, *request, reply);
-    }
-
-    /*
-    *   @brief deletes a server by calling resAlloc stub
-    *
-    *   @param context
-    *   @param request 
-    *   @param reply
-    * 
-    *   @return gRPC status
-    */
-    Status DeleteServer(ServerContext* context, const DeleteServerRequest* request, DeleteServerReply* reply) override 
-    {
-        _index = _index + 1; 
-        if(_helper.IsNodeAtIndexLeader(_index))
-        {
-            _index = _index + 1; 
-        }
-        // TODO: Check if index is that of leader
-        string raftIp = _helper.GetServerIPToRouteTo(_index);   
-        string resAllocIP = _helper.GetIpForResAlloc(raftIp);
-        auto stub = LBNodeComm::NewStub(grpc::CreateChannel(resAllocIP, grpc::InsecureChannelCredentials()));
-        
-        ClientContext* clientContext;
-        return stub->DeleteServer(clientContext, *request, reply);
-    }
-
 };
 
 /*
@@ -569,17 +539,109 @@ void* RunServerForNodes(void* arg)
     return NULL;
 }
 
+
+/******************************************************************************
+ * DECLARATION
+ *****************************************************************************/
+class ResAllocRelayService final: public ResAlloc::Service
+{
+private:
+    int _index = 0;
+   
+public:
+    // TODO
+    /*
+    *   @brief adds another server by calling resAlloc stub
+    *
+    *   @param context
+    *   @param request 
+    *   @param reply
+    * 
+    *   @return gRPC status
+    */
+    Status AddServer(ServerContext* context, const AddServerRequest* clientRequest, AddServerReply* clientReply) override 
+    {
+        string raftIp = _helper.GetServerIPToRouteTo(_index);  
+        string resAllocIP = _helper.GetIpForResAlloc(raftIp);
+
+        auto stub = ResAlloc::NewStub(grpc::CreateChannel(resAllocIP, grpc::InsecureChannelCredentials()));
+        _index = _index + 1; 
+
+        ClientContext clientContext;
+        AddServerRequest request;
+        AddServerReply reply;
+
+        // TODO: set request
+        request.set_kv_ip(""); // TODO: Set from _helper functions
+        request.set_raft_ip(""); // TODO: Set from _helper functions
+        request.set_lb_ip(_helper.GetLBCommIp());
+
+        return stub->AddServer(&clientContext, request, &reply);
+    }
+
+    // TODO
+    /*
+    *   @brief deletes a server by calling resAlloc stub
+    *
+    *   @param context
+    *   @param request 
+    *   @param reply
+    * 
+    *   @return gRPC status
+    */
+    Status DeleteServer(ServerContext* context, const DeleteServerRequest* request, DeleteServerReply* reply) override 
+    {
+        dbgprintf("[DEBUG] %s: Inside function\n", __func__);
+        _index = _index + 1; 
+        if(_helper.IsNodeAtIndexLeader(_index))
+        {
+            _index = _index + 1; 
+        }
+        // TODO: Check if index is that of leader
+        string raftIp = _helper.GetServerIPToRouteTo(_index);   
+        string resAllocIP = _helper.GetIpForResAlloc(raftIp);
+        auto stub = ResAlloc::NewStub(grpc::CreateChannel(resAllocIP, grpc::InsecureChannelCredentials()));
+        
+        ClientContext* clientContext;
+        return stub->DeleteServer(clientContext, *request, reply);
+    }
+};
+
+void* RunResAllocRelayService(void* args)
+{
+    string server_address((char *) args);
+    ResAllocRelayService service;
+    grpc::EnableDefaultHealthCheckService(true);
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+    ServerBuilder builder;
+    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    builder.RegisterService(&service);
+    unique_ptr<Server> server(builder.BuildAndStart());
+    cout << "LB for ResAllocRelayServicelistening on " << server_address << std::endl;
+
+    server->Wait();
+
+    return NULL;
+}
+
+
 /******************************************************************************
  * DRIVER
  *****************************************************************************/
+// @usage: ./loadbalancer <ip with port for kv client> <ip with port for servers> <ip with port for resalloc client>
 int main (int argc, char *argv[]){
-    pthread_t client_server_t, node_server_t;
+    // Init
+    _helper.SetLBCommIp(argv[2]);
+
+    pthread_t client_server_t, node_server_t, resalloc_server_t;
   
     pthread_create(&client_server_t, NULL, RunServerForClient, argv[1]);
     pthread_create(&node_server_t, NULL, RunServerForNodes, argv[2]);
+    pthread_create(&resalloc_server_t, NULL, RunResAllocRelayService, argv[3]);
 
     pthread_join(client_server_t, NULL);
     pthread_join(node_server_t, NULL);
+    pthread_join(resalloc_server_t, NULL);
     
     return 0;
 }

@@ -52,13 +52,38 @@
 //     return;
 // }
 
+// TODO
 grpc::Status ResourceAllocator::AddServer(ServerContext* context, const AddServerRequest* request, AddServerReply* reply) 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+    int forkReturnCode = fork();
+    // fork failed
+    if (forkReturnCode < 0)
+    {
+        dbgprintf("[ERROR] fork failed\n");
+    }
+    // child process
+    else if (forkReturnCode == 0)
+    {
+        char* args[5];
+        args[0] = (char *) string("server").c_str();
+        args[1] = (char *) request->kv_ip().c_str();
+        args[2] = (char *) request->raft_ip().c_str();
+        args[3] = (char *) request->lb_ip().c_str();
+        args[4] = (char *) NULL;
+        execv("./server", args);
+        dbgprintf("[WARN] should not print\n");
+    }
+    else
+    {
+        // TODO: Remove
+        dbgprintf("[INFO] parent\n");
+    }
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
     return grpc::Status::OK;
 }
 
+// TODO
 grpc::Status ResourceAllocator::DeleteServer(ServerContext* context, const DeleteServerRequest* request, DeleteServerReply* reply) 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);

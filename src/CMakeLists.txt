@@ -151,6 +151,7 @@ foreach(_target
   target_link_libraries(${_target}
     keyvalueops_grpc_proto
     lb_grpc_proto
+    resalloc_grpc_proto
     client_lib
     ${_REFLECTION}
     ${_GRPC_GRPCPP}

@@ -5,9 +5,6 @@ package kvstore;
 service LBNodeComm {
     rpc SendHeartBeat(stream HeartBeatRequest) returns (stream HeartBeatReply) {}
     rpc AssertLeadership(AssertLeadershipRequest) returns (AssertLeadershipReply) {}
-    
-    rpc AddServer(AddServerRequest) returns (AddServerReply) {}
-    rpc DeleteServer(DeleteServerRequest) returns (DeleteServerReply) {}
 }
 
 message HeartBeatRequest {
@@ -39,14 +36,3 @@ message FollowerMetadata {
     string raft_ip = 1;
 }
 
-message AddServerRequest {
-}
-
-message AddServerReply {
-}
-
-message DeleteServerRequest {
-}
-
-message DeleteServerReply {
-}

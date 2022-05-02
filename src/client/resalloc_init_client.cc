@@ -13,13 +13,15 @@ using namespace std;
 
 int main(int argc, char** argv) 
 {
-    string target_str;
-    target_str = "localhost:50000"; // TODO: Use Macro
     ClientContext context;
     AddServerRequest addServerRequest;
     AddServerReply addServerReply;
+    
+    addServerRequest.set_kv_ip(string(argv[1]));
+    addServerRequest.set_raft_ip(string(argv[2]));
+    addServerRequest.set_lb_ip(string(argv[3]));
 
-    auto stub = ResAlloc::NewStub(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
+    auto stub = ResAlloc::NewStub(grpc::CreateChannel(RES_ALLOC_SERVER_IP, grpc::InsecureChannelCredentials()));
     Status status = stub->AddServer(&context, addServerRequest, &addServerReply);
     cout << "status = " << status.error_code() << endl;
     return 0;
