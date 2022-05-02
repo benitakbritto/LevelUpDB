@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package kvstore;
+
+service ResAlloc {
+    rpc AddServer(AddServerRequest) returns (AddServerReply) {}
+    rpc DeleteServer(DeleteServerRequest) returns (DeleteServerReply) {}
+}
+
+message AddServerRequest {
+    
+}
+
+message AddServerReply {
+}
+
+message DeleteServerRequest {
+}
+
+message DeleteServerReply {
+}

@@ -14,43 +14,71 @@
  * GLOBALS
  *****************************************************************************/
 
-
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
 // TODO: Change to grpc server
-void ResourceAllocator::AddServer()
-{
-    int forkReturnCode = fork();
-    // fork failed
-    if (forkReturnCode < 0)
-    {
-        dbgprintf("[ERROR] fork failed\n");
-    }
-    // child process
-    else if (forkReturnCode == 0)
-    {
-        char* args[5];
-        args[0] = "server";
-        args[1] = "0.0.0.0:60000";
-        args[2] = "0.0.0.0:600001";
-        args[3] = "0.0.0.0:50052";
-        args[4] = (char *) NULL;
-        execv("./server", args);
-        dbgprintf("[WARN] should not print\n");
-    }
-    else
-    {
-        // TODO: Remove
-        dbgprintf("[INFO] parent\n");
-    }
-}
+// void ResourceAllocator::AddServer()
+// {
+//     int forkReturnCode = fork();
+//     // fork failed
+//     if (forkReturnCode < 0)
+//     {
+//         dbgprintf("[ERROR] fork failed\n");
+//     }
+//     // child process
+//     else if (forkReturnCode == 0)
+//     {
+//         char* args[5];
+//         args[0] = "server";
+//         args[1] = "0.0.0.0:60000";
+//         args[2] = "0.0.0.0:600001";
+//         args[3] = "0.0.0.0:50052";
+//         args[4] = (char *) NULL;
+//         execv("./server", args);
+//         dbgprintf("[WARN] should not print\n");
+//     }
+//     else
+//     {
+//         // TODO: Remove
+//         dbgprintf("[INFO] parent\n");
+//     }
+// }
 
 
 // TODO
-void ResourceAllocator::DeleteServer()
+// void ResourceAllocator::DeleteServer()
+// {
+//     return;
+// }
+
+grpc::Status ResourceAllocator::AddServer(ServerContext* context, const AddServerRequest* request, AddServerReply* reply) 
 {
-    return;
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+    return grpc::Status::OK;
+}
+
+grpc::Status ResourceAllocator::DeleteServer(ServerContext* context, const DeleteServerRequest* request, DeleteServerReply* reply) 
+{
+    dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+    dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+    return grpc::Status::OK;
+}
+
+void RunResourceAllocatorServer() 
+{
+    ResourceAllocator service;
+    grpc::EnableDefaultHealthCheckService(true);
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+    ServerBuilder builder;
+    builder.AddListeningPort(RES_ALLOC_SERVER_IP, grpc::InsecureServerCredentials());
+    builder.RegisterService(&service);
+    unique_ptr<Server> server(builder.BuildAndStart());
+    
+    cout << "[INFO] Resource Allocator Server listening on "<< RES_ALLOC_SERVER_IP << endl;
+    
+    server->Wait();
 }
 
 /*
@@ -61,9 +89,15 @@ Test:
             ps -e | grep server
             kill -9 <pid>
 */
-int main()
+// int main()
+// {
+//     ResourceAllocator obj;
+//     obj.AddServer();
+//     return 0;
+// }
+
+int main(int argc, char **argv) 
 {
-    ResourceAllocator obj;
-    obj.AddServer();
+    RunResourceAllocatorServer();
     return 0;
 }

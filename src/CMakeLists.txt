@@ -22,6 +22,10 @@ get_filename_component(raft_proto_path "${raft_proto}" PATH)
 get_filename_component(keyvalueops_proto "../src/protos/keyvalueops.proto" ABSOLUTE)
 get_filename_component(keyvalueops_proto_path "${keyvalueops_proto}" PATH)
 
+# Proto file 4
+get_filename_component(resalloc_proto "../src/protos/resalloc.proto" ABSOLUTE)
+get_filename_component(resalloc_proto_path "${resalloc_proto}" PATH)
+
 # Generated sources
 # Proto file 1
 set(lb_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/lb.pb.cc")
@@ -68,6 +72,21 @@ add_custom_command(
         "${keyvalueops_proto}"
       DEPENDS "${keyvalueops_proto}")
 
+# Proto file 4
+set(resalloc_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/resalloc.pb.cc")
+set(resalloc_proto_hdrs "${CMAKE_CURRENT_BINARY_DIR}/resalloc.pb.h")
+set(resalloc_grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/resalloc.grpc.pb.cc")
+set(resalloc_grpc_hdrs "${CMAKE_CURRENT_BINARY_DIR}/resalloc.grpc.pb.h")
+add_custom_command(
+      OUTPUT "${resalloc_proto_srcs}" "${resalloc_proto_hdrs}" "${resalloc_grpc_srcs}" "${resalloc_grpc_hdrs}"
+      COMMAND ${_PROTOBUF_PROTOC}
+      ARGS --grpc_out "${CMAKE_CURRENT_BINARY_DIR}"
+        --cpp_out "${CMAKE_CURRENT_BINARY_DIR}"
+        -I "${resalloc_proto_path}"
+        --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
+        "${resalloc_proto}"
+      DEPENDS "${resalloc_proto}")
+
 # Include generated *.pb.h files
 # TODO: Uncomment later
 include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${SNAPPY_INCLUDE_DIR}" "${LEVELDB_INCLUDE_DIR}")
@@ -107,10 +126,22 @@ target_link_libraries(keyvalueops_grpc_proto
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
+# Proto file 4
+add_library(resalloc_grpc_proto
+  ${resalloc_grpc_srcs}
+  ${resalloc_grpc_hdrs}
+  ${resalloc_proto_srcs}
+  ${resalloc_proto_hdrs})
+target_link_libraries(resalloc_grpc_proto
+  ${_REFLECTION}
+  ${_GRPC_GRPCPP}
+  ${_PROTOBUF_LIBPROTOBUF})
+
 add_library(client_lib "client/client.cc")
-target_link_libraries(client_lib 
-  keyvalueops_grpc_proto
-)
+  target_link_libraries(client_lib 
+    keyvalueops_grpc_proto
+  )
+  
 
 #Client and LB
 foreach(_target
@@ -160,6 +191,29 @@ foreach(_target
     levelDBWrapper
     ${LEVELDB_LIBRARY}
     ${SNAPPY_LIBRARY}
+    ${_REFLECTION}
+    ${_GRPC_GRPCPP}
+    ${_PROTOBUF_LIBPROTOBUF})
+endforeach()
+
+# ResAllocInitClient
+foreach(_target
+  resalloc_init_client)
+  add_executable(${_target} "./client/${_target}.cc")
+  target_link_libraries(${_target}
+    resalloc_grpc_proto
+    ${_REFLECTION}
+    ${_GRPC_GRPCPP}
+    ${_PROTOBUF_LIBPROTOBUF})
+endforeach()
+
+
+# ResAllocListener
+foreach(_target
+  resource_alloc_listener)
+  add_executable(${_target} "./server/${_target}.cc")
+  target_link_libraries(${_target}
+    resalloc_grpc_proto
     ${_REFLECTION}
     ${_GRPC_GRPCPP}
     ${_PROTOBUF_LIBPROTOBUF})
