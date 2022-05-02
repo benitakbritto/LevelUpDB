@@ -93,21 +93,6 @@ void RunResourceAllocatorServer()
     server->Wait();
 }
 
-/*
-Test:
-    cd src/cmake/build
-    @usage  g++ -o r ../../server/resource_alloc_listener.cc -Wall && ./r
-    @note   server's will be running in the backgroun
-            ps -e | grep server
-            kill -9 <pid>
-*/
-// int main()
-// {
-//     ResourceAllocator obj;
-//     obj.AddServer();
-//     return 0;
-// }
-
 int main(int argc, char **argv) 
 {
     RunResourceAllocatorServer();

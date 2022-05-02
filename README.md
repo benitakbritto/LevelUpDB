@@ -31,9 +31,10 @@ Clone and follow the commands mentioned [here](https://github.com/google/snappy)
 
 ### Run
 ```
-./loadbalancer <ip with port for client to connect> <ip with port for servers to send heartbeat>
-./server <my kv ip with port> <my raft ip with port> <lb ip with port>
-./keyvalue_client <ip of lb with port>
+./loadbalancer <ip with port for kv client> <ip with port for servers> <ip with port for resalloc client>
+./resource_alloc_listener 
+./resalloc_init_client <my ip with port for kv>  <ip with port for raft>  <lb ip>
+./keyvalue_client <ip of kv lb with port> <ip of resalloc lb with port>
 ```
 
 
