@@ -589,21 +589,25 @@ public:
     * 
     *   @return gRPC status
     */
-    Status DeleteServer(ServerContext* context, const DeleteServerRequest* request, DeleteServerReply* reply) override 
+    Status DeleteServer(ServerContext* context, const DeleteServerRequest* clientRequest, DeleteServerReply* clientReply) override 
     {
         dbgprintf("[DEBUG] %s: Inside function\n", __func__);
-        _index = _index + 1; 
         if(_helper.IsNodeAtIndexLeader(_index))
         {
             _index = _index + 1; 
         }
-        // TODO: Check if index is that of leader
         string raftIp = _helper.GetServerIPToRouteTo(_index);   
         string resAllocIP = _helper.GetIpForResAlloc(raftIp);
         auto stub = ResAlloc::NewStub(grpc::CreateChannel(resAllocIP, grpc::InsecureChannelCredentials()));
+        _index = _index + 1; 
+
+        ClientContext clientContext;
+        DeleteServerRequest request;
+        DeleteServerReply reply;
+
+        // TODO Set request
         
-        ClientContext* clientContext;
-        return stub->DeleteServer(clientContext, *request, reply);
+        return stub->DeleteServer(&clientContext, request, &reply);
     }
 };
 

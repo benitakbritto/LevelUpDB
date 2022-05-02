@@ -17,6 +17,9 @@ message AddServerReply {
 }
 
 message DeleteServerRequest {
+    string kv_ip = 1;
+    string raft_ip = 2;
+    string lb_ip = 3;
 }
 
 message DeleteServerReply {

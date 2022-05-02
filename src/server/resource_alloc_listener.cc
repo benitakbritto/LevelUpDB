@@ -17,42 +17,7 @@
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
-// TODO: Change to grpc server
-// void ResourceAllocator::AddServer()
-// {
-//     int forkReturnCode = fork();
-//     // fork failed
-//     if (forkReturnCode < 0)
-//     {
-//         dbgprintf("[ERROR] fork failed\n");
-//     }
-//     // child process
-//     else if (forkReturnCode == 0)
-//     {
-//         char* args[5];
-//         args[0] = "server";
-//         args[1] = "0.0.0.0:60000";
-//         args[2] = "0.0.0.0:600001";
-//         args[3] = "0.0.0.0:50052";
-//         args[4] = (char *) NULL;
-//         execv("./server", args);
-//         dbgprintf("[WARN] should not print\n");
-//     }
-//     else
-//     {
-//         // TODO: Remove
-//         dbgprintf("[INFO] parent\n");
-//     }
-// }
 
-
-// TODO
-// void ResourceAllocator::DeleteServer()
-// {
-//     return;
-// }
-
-// TODO
 grpc::Status ResourceAllocator::AddServer(ServerContext* context, const AddServerRequest* request, AddServerReply* reply) 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
