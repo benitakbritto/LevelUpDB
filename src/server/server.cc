@@ -67,8 +67,6 @@ RaftServer serverImpl;
 unordered_map <string, pair<int, unique_ptr<Raft::Stub>>> g_nodeList;
 RaftServer* signalHandlerService;
 LBNodeCommClient* lBNodeCommClient;
-SnapshotHelper g_snapshotHelper;
-LevelDBWrapper levelDBWrapper;
 
 // for debug
 void PrintNodesInNodeList()
@@ -130,8 +128,13 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
     {
         dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
         sleep(1);
-    } while(!serverImpl.ReceivedMajority(&successCount));
-            
+    } while(!serverImpl.ReceivedMajority(&successCount) && g_stateHelper.GetIdentity()==LEADER);
+    
+    // if(g_stateHelper.GetIdentity() != LEADER)
+    // {
+    //     dbgprintf("[DEBUG] Not a leader anymore, aborting Put operation\n");
+    //     return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, "Not a leader");
+    // }
     g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1);
     serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
 
@@ -324,7 +327,6 @@ void RaftServer::ServerInit()
 {    
     dbgprintf("[DEBUG]: %s: Inside function\n", __func__);
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);    
-    
     
     int old_errno = errno;
     errno = 0;
@@ -547,6 +549,13 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
     // Retry the RPC until log is consistent
     do
     {
+        if(nextIndex<g_snapshot_length)
+        {
+            cout<<"[DEBUG]: Sending snapshot to %s\n", followerIp.c_str();
+            invokeInstallSnapshot(followerIp);
+            return;
+        }
+
         request = prepareRequestForAppendEntries(followerIp, nextIndex, logLengthForBroadcast);
         dbgprintf("[DEBUG] %s: Checking if request is intact. Leader IP = %s\n", __func__, request.leader_id().c_str());
         auto stub = g_nodeList[followerIp].second.get();
@@ -566,12 +575,12 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
         } while (status.error_code() == StatusCode::UNAVAILABLE && g_stateHelper.GetIdentity() == LEADER);
 
         // Check if server should send snapshot instead
-        if(request.term() - reply.term() >= MAX_TERM_DIFF_FOR_SNAPSHOT)
-        {
-            dbgprintf("[DEBUG]: Sending snapshot to %s\n", followerIp.c_str());
-            invokeInstallSnapshot(followerIp);
-            return;
-        }
+        // if(request.term() - reply.term() >= MAX_TERM_DIFF_FOR_SNAPSHOT)
+        // {
+        //     dbgprintf("[DEBUG]: Sending snapshot to %s\n", followerIp.c_str());
+        //     invokeInstallSnapshot(followerIp);
+        //     return;
+        // }
 
         // Check if RPC should be retried because of log inconsistencies
         shouldRetry = (request.term() >= reply.term() && !reply.success() && status.error_code() == StatusCode::OK);
@@ -814,7 +823,7 @@ void RaftServer::invokeInstallSnapshot(string followerIp) {
         reply.Clear();
 
         // Create snapshot map 
-        unordered_map<string,string> snap_state = g_snapshotHelper.GetSnapshot();
+        unordered_map<string,string> snap_state = _snapshot_helper.GetSnapshot();
         KeyValuePair *kvPair;
         
         for (auto& it:snap_state) {
@@ -822,9 +831,16 @@ void RaftServer::invokeInstallSnapshot(string followerIp) {
             kvPair->set_key(it.first);
             kvPair->set_value(it.second);
         } 
+        request.set_index(g_snapshot_length-1);
         status = stub->InstallSnapshot(&context, request, &reply);
         retryCount++;
-    } while (status.error_code() == StatusCode::UNAVAILABLE && retryCount<3);
+    } while (status.error_code() != StatusCode::OK && retryCount<3);
+
+    if(status.ok())
+    {
+        g_stateHelper.SetMatchIndex(followerIp, g_snapshot_length-1);
+        g_stateHelper.SetNextIndex(followerIp, g_snapshot_length);
+    }
 }
 
 /*
@@ -932,13 +948,13 @@ void RaftServer::ExecuteCommands(int start, int end)
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for(int i = start; i <= end; i++)
     {   // TODO: Uncomment after pulling cmake changes for leveldb from main 
-        // levelDBWrapper.Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
+        _levelDBWrapper.Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
         // TODO: check failure
         g_stateHelper.SetLastAppliedIndex(i); 
 
         // Create Snapshot after a few state changes
-        if (g_stateHelper.GetLastAppliedIndex() >= APPLIED_INDEX_BFORE_SNAPSHOT) {
-            serverImpl.CreateSnapshot();
+        if (g_stateHelper.GetLastAppliedIndex() % APPLIED_LENGTH_BEFORE_SNAPSHOT == 0 && g_stateHelper.GetLastAppliedIndex()>0) {
+            CreateSnapshot();
         }
     }
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
@@ -951,8 +967,10 @@ void RaftServer::ExecuteCommands(int start, int end)
 void RaftServer::CreateSnapshot()
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-    unordered_map<string, string> snap_state = levelDBWrapper.GetSnapshot();
-    g_snapshotHelper.SetSnapshot(snap_state);
+    cout<<"INSIDE CREATE SNAPSHOT"<<endl;
+    unordered_map<string, string> snap_state = _levelDBWrapper.GetSnapshot();
+    _snapshot_helper.SetSnapshot(snap_state, GetMyIp());
+    g_snapshot_length = g_snapshot_length + APPLIED_LENGTH_BEFORE_SNAPSHOT;
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
 
@@ -1062,7 +1080,12 @@ grpc::Status RaftServer::InstallSnapshot(ServerContext* context, const InstallSn
         auto kvPair = request->key_value_pair(i);
         snap_state[kvPair.key()] = kvPair.value();
     }
-    levelDBWrapper.AtomicPut(snap_state);
+    _levelDBWrapper.AtomicPut(snap_state);
+    g_snapshot_length = request->index()+1;
+    //TODO: Verify
+    g_stateHelper.SetCommitIndex(request->index());
+    g_stateHelper.SetLastAppliedIndex(request->index());
+    _snapshot_helper.truncateLog();
     return grpc::Status::OK;
 }
 
@@ -1086,7 +1109,7 @@ int main(int argc, char **argv)
     g_stateHelper = *(new StateHelper(argv[1]));
     g_stateHelper.SetIdentity(FOLLOWER);
     serverImpl.SetMyIp(argv[2]);
-    
+
     std::thread(RunKeyValueServer, argv[1]).detach();
     std::thread(StartHB, argv[1], argv[2], argv[3]).detach();
     std::thread(RunRaftServer, argv[2]).detach();

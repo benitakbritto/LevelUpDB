@@ -33,7 +33,9 @@ class SnapshotHelper
     
     public:
         unordered_map<string, string> GetSnapshot();
-        void SetSnapshot(unordered_map<string, string> snapshot);
+        void SetSnapshot(unordered_map<string, string> snapshot, string ip);
+        int GetSnapshotLength();
+        void truncateLog();
 };
 
 

@@ -43,6 +43,7 @@ message AppendEntriesReply {
 
 message InstallSnapshotRequest {
     repeated KeyValuePair key_value_pair = 1;
+    uint32 index = 2;
 }
 
 message KeyValuePair {

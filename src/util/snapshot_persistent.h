@@ -28,10 +28,10 @@ class PersistentSnapshot
 {
     private:
        int writeSnapshotToFile(string snapshotFilePath);
-       void truncateLog();
 
     public:
-        void SetSnapshot(unordered_map<string,string>);
+        void SetSnapshot(unordered_map<string,string>, string ip);
+        void truncateLog();
 };
 
 #endif

@@ -57,6 +57,8 @@ private:
   void runForElection();
   void invokeRequestVote(string host);
   bool requestVote(Raft::Stub* stub);
+
+  void invokeInstallSnapshot(string followerIp);
   
   void invokeAppendEntries(string node_ip, atomic<int>* successCount, int logLengthForBroadcast);
   void invokePeriodicAppendEntries();

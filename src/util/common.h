@@ -8,10 +8,11 @@
  *****************************************************************************/
 enum ServerIdentity { LEADER, FOLLOWER, CANDIDATE};
 enum ConsistencyLevel { STRONG_LEADER, STRONG_MAJORITY, EVENTUAL };
+extern int g_snapshot_length;
 /******************************************************************************
  * MACROS
  *****************************************************************************/
-#define DEBUG                       0                
+#define DEBUG                       0              
 #define dbgprintf(...)              if (DEBUG) { printf(__VA_ARGS__); }
 #define CRASH_TEST                  0
 #define crash()                     if (CRASH_TEST) { *((char*)0) = 0; }
@@ -26,7 +27,7 @@ enum ConsistencyLevel { STRONG_LEADER, STRONG_MAJORITY, EVENTUAL };
 #define RETRY_TIME_START             1                                     
 #define RETRY_TIME_MULTIPLIER        2                                    
 #define MAX_TERM_DIFF_FOR_SNAPSHOT   5
-#define APPLIED_INDEX_BFORE_SNAPSHOT 10
+#define APPLIED_LENGTH_BEFORE_SNAPSHOT 3
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
