@@ -10,6 +10,8 @@
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
 #include "../util/common.h"
+#include <vector>
+#include <bits/stdc++.h>
 
 /******************************************************************************
  * NAMESPACES
@@ -30,12 +32,18 @@ using namespace std;
 /******************************************************************************
  * GLOBALS
  *****************************************************************************/
+enum NodeStatus
+{
+    ALIVE,
+    DEAD
+};
 
 struct NodeMetadata
 {
     string kvIp;
     KeyValueClient* kvStub;
     int identity;
+    int status;
 };
 
 typedef NodeMetadata NodeMeta;
@@ -64,6 +72,7 @@ class Helper {
             nodeMeta.kvIp = _kvIp;
             nodeMeta.kvStub = new KeyValueClient(grpc::CreateChannel(_kvIp, grpc::InsecureChannelCredentials()));
             nodeMeta.identity = _identity;
+            nodeMeta.status = ALIVE;
             
             g_nodeList[_raftIp] = nodeMeta;
         }
@@ -101,8 +110,42 @@ class Helper {
             return _lbCommIp;
         }
 
-        // TODO: GenerateKVIP()
-        // TODO: GenerateRaftIP()
+        string GetNodeIpFromIndex(int index)
+        {
+            int idx = index % (g_nodeList.size());
+            auto it = g_nodeList.begin();
+            advance(it, idx);
+            string ipWithPort = it->first;
+            int colon = ipWithPort.find(":");
+            return ipWithPort.substr(0, colon); // ip without port
+        }
+
+        int GetPort(string ipWithPort)
+        {
+            int colon = ipWithPort.find(":");
+            return stoi(ipWithPort.substr(colon + 1));
+        }
+
+        // TODO: wake the dead ports
+        pair<string, string> GenerateKvAndRaftIp(int index)
+        {
+            vector<int> portsInUse;
+            for (auto itr = g_nodeList.begin(); itr != g_nodeList.end(); itr++)
+            {
+                string raftIp = itr->first;
+                string kvIp = itr->second.kvIp;
+                portsInUse.push_back(GetPort(raftIp));
+                portsInUse.push_back(GetPort(kvIp));
+            }
+
+            sort(portsInUse.begin(), portsInUse.end(), greater<int>()); // desc order
+            
+            string ip = GetNodeIpFromIndex(index);
+            string newKvIp = ip + ":" + to_string(portsInUse[0] + 1);
+            string newRaftIp = ip + ":" + to_string(portsInUse[0] + 2);
+            dbgprintf("[DEBUG] %s: newKvIp = %s | newRaftIp = %s\n", __func__, newKvIp.c_str(), newRaftIp.c_str());
+            return make_pair(newKvIp, newRaftIp);
+        }
 };
 
 
@@ -443,7 +486,8 @@ public:
         cout << "[ERROR]: stream broke" << endl;
         // Do not delete node
         // eraseNode(raftIp);
-
+        g_nodeList[raftIp].status = DEAD;
+        
         return Status::OK;
     }
 
@@ -561,20 +605,23 @@ public:
     */
     Status AddServer(ServerContext* context, const AddServerRequest* clientRequest, AddServerReply* clientReply) override 
     {
+        // get res alloc stub
         string raftIp = _helper.GetServerIPToRouteTo(_index);  
         string resAllocIP = _helper.GetIpForResAlloc(raftIp);
-
         auto stub = ResAlloc::NewStub(grpc::CreateChannel(resAllocIP, grpc::InsecureChannelCredentials()));
+        
         _index = _index + 1; 
 
+        // request
         ClientContext clientContext;
         AddServerRequest request;
         AddServerReply reply;
-
-        // TODO: set request
-        request.set_kv_ip(""); // TODO: Set from _helper functions
-        request.set_raft_ip(""); // TODO: Set from _helper functions
+        auto newIps = _helper.GenerateKvAndRaftIp(_index);
+        request.set_kv_ip(newIps.first); 
+        request.set_raft_ip(newIps.second);
         request.set_lb_ip(_helper.GetLBCommIp());
+
+        dbgprintf("[DEBUG] %s: kvip = %s | raft ip = %s | lb ip = %s\n", __func__, request.kv_ip().c_str(), request.raft_ip().c_str(), request.lb_ip().c_str());
 
         return stub->AddServer(&clientContext, request, &reply);
     }
