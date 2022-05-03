@@ -643,17 +643,22 @@ public:
         {
             _index = _index + 1; 
         }
+
+        // get res alloc stub
         string raftIp = _helper.GetServerIPToRouteTo(_index);   
         string resAllocIP = _helper.GetIpForResAlloc(raftIp);
         auto stub = ResAlloc::NewStub(grpc::CreateChannel(resAllocIP, grpc::InsecureChannelCredentials()));
+        
         _index = _index + 1; 
 
+        // request
         ClientContext clientContext;
         DeleteServerRequest request;
         DeleteServerReply reply;
+        request.set_kv_ip(g_nodeList[raftIp].kvIp);
+        request.set_raft_ip(raftIp);
+        dbgprintf("[DEBUG] %s: kv ip = %s | raft ip = %s\n", __func__, request.kv_ip().c_str(), request.raft_ip().c_str());
 
-        // TODO Set request
-        
         return stub->DeleteServer(&clientContext, request, &reply);
     }
 };
