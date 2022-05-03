@@ -28,6 +28,7 @@ using namespace std;
 /******************************************************************************
  * MACROS
  *****************************************************************************/
+#define AUTO_SCALE_THRESHOLD 3
 
 /******************************************************************************
  * GLOBALS
@@ -52,6 +53,7 @@ unordered_map<string, NodeMeta> g_nodeList;
 // unordered_map<string, pair<int, KeyValueClient*>> g_nodeList;
 string g_leaderIP;
 int g_currentTerm = 0;
+int shouldAutoScale = false;
 
 
 /******************************************************************************
@@ -63,6 +65,7 @@ int g_currentTerm = 0;
 class Helper {
     private:
         string _lbCommIp;
+        string _resAllocIp;
 
     public:
         void SetNodeMetadata(int _identity, string _kvIp, string _raftIp)
@@ -105,6 +108,16 @@ class Helper {
             _lbCommIp = ip;
         }
 
+        string GetResAllocIp()
+        {
+            return _resAllocIp;
+        }
+
+        void SetResAllocIp(string ip)
+        {
+            _resAllocIp = ip;
+        }
+
         string GetLBCommIp()
         {
             return _lbCommIp;
@@ -126,7 +139,6 @@ class Helper {
             return stoi(ipWithPort.substr(colon + 1));
         }
 
-        // TODO: wake the dead ports
         pair<string, string> GenerateKvAndRaftIp(int index)
         {
             vector<int> alivePorts;
@@ -157,8 +169,8 @@ class Helper {
             // Use the dead ports, if any
             if (deadKvPorts.size() != 0 && deadRaftPorts.size() != 0)
             {
-                newKvIp = deadKvPorts[0];
-                newRaftIp = deadRaftPorts[0];
+                newKvIp = ip + ":" + to_string(deadKvPorts[0]);
+                newRaftIp = ip + ":" + to_string(deadRaftPorts[0]);
             }   
             // generate port by adding +1/+2 to the max port in use         
             else
@@ -175,6 +187,7 @@ class Helper {
 
 
 Helper _helper; // TODO: Make better
+
 /******************************************************************************
  * DECLARATION
  *****************************************************************************/
@@ -392,7 +405,7 @@ private:
     void registerNode(int identity, string kvIp, string raftIp) 
     {
         _helper.SetNodeMetadata(identity, kvIp, raftIp);
-        dbgprintf("[DEBUG]: Length of g_nodeList at LB: %ld", g_nodeList.size());
+        dbgprintf("[DEBUG]: Length of g_nodeList at LB: %ld\n", g_nodeList.size());
     }
 
     /*
@@ -454,6 +467,34 @@ private:
         }
     }
 
+    int getCountOfLiveNodes()
+    {
+        int count = 0;
+        for (auto itr = g_nodeList.begin(); itr != g_nodeList.end(); itr++)
+        {
+            if (itr->second.status == ALIVE)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    // TODO test
+    void invokeAddServer()
+    {
+        ClientContext addServercontext;
+        AddServerRequest addServerRequest;
+        AddServerReply addServerReply;
+        
+        dbgprintf("[DEBUG] %s: res alloc ip = %s\n", __func__, _helper.GetResAllocIp().c_str());
+
+        auto resAllocStub = ResAlloc::NewStub(grpc::CreateChannel(string(_helper.GetResAllocIp()), grpc::InsecureChannelCredentials()));
+        Status addServerStatus = resAllocStub->AddServer(&addServercontext, addServerRequest, &addServerReply);
+        cout << "status = " << addServerStatus.error_code() << endl;
+    }
+
 public:
     LBNodeCommService() {}
 
@@ -506,12 +547,21 @@ public:
                 break;
             }
             dbgprintf("[INFO] %s: sent heartbeat reply\n", __func__);
+
+            if (!shouldAutoScale && g_nodeList.size() == AUTO_SCALE_THRESHOLD)
+            {
+                shouldAutoScale = true;
+            }
         }
 
         cout << "[ERROR]: stream broke" << endl;
         // Do not delete node
-        // eraseNode(raftIp);
         g_nodeList[raftIp].status = DEAD;
+        if (getCountOfLiveNodes() < AUTO_SCALE_THRESHOLD && shouldAutoScale)
+        {
+            cout << "[INFO] Autoscale" << endl;
+            invokeAddServer();
+        }
         
         return Status::OK;
     }
@@ -711,6 +761,7 @@ void* RunResAllocRelayService(void* args)
 int main (int argc, char *argv[]){
     // Init
     _helper.SetLBCommIp(argv[2]);
+    _helper.SetResAllocIp(argv[3]);
 
     pthread_t client_server_t, node_server_t, resalloc_server_t;
   
