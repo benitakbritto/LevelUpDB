@@ -17,39 +17,49 @@ using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
 
-using kvstore::GetRequest;
-using kvstore::GetReply;
-using kvstore::PutRequest;
-using kvstore::PutReply;
+using namespace kvstore;
 
 /******************************************************************************
  * DRIVER
  *****************************************************************************/
-// @usage: ./keyvalue_client <ip of lb with port>
+// @usage for put: ./keyvalue_client <ip of lb with port> p 
+// @usage for get: ./keyvalue_client <ip of lb with port> g 
 int main(int argc, char** argv) 
 {
     string target_str = string(argv[1]);
     KeyValueClient* keyValueClient = new KeyValueClient(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
     
-    // Test Put
-    PutRequest putRequest;
-    PutReply putReply;
+    char* op = argv[2];
 
-    putRequest.set_key("k1");
-    putRequest.set_value("v1");
+    if(*op == 'p')
+    {
+        // Test Put
+        PutRequest putRequest;
+        PutReply putReply;
 
-    Status putStatus = keyValueClient->PutToDB(putRequest, &putReply);
-    cout << putStatus.error_code() << endl;
+        putRequest.set_key("k1");
+        putRequest.set_value("v1");
 
+        Status putStatus = keyValueClient->PutToDB(putRequest, &putReply);
+        cout << putStatus.error_code() << endl;
+    }
+
+    else {
     // Test Get
-    // GetRequest getRequest;
-    // GetReply getReply;
+        GetRequest getRequest;
+        GetReply getReply;
 
-    // getRequest.set_key("k1");
-    // getRequest.set_consistency_level(0);
+        getRequest.set_key("k1");
+        getRequest.set_quorum(2);
+        getRequest.set_consistency_level(1);
 
-    // Status getStatus = keyValueClient->GetFromDB(getRequest, &getReply);
-    // cout << getStatus.error_code() << endl;
-
+        Status getStatus = keyValueClient->GetFromDB(getRequest, &getReply);
+        cout << getStatus.error_code() << endl;
+        
+        for(int i=0; i < getReply.values().size(); i++)
+        {
+            cout << getReply.values(i).value() << endl;
+        }
+    }
     return 0;
 }
