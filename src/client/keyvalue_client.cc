@@ -50,7 +50,7 @@ int main(int argc, char** argv)
         GetReply getReply;
 
         getRequest.set_key("k1");
-        getRequest.set_quorum(2);
+        getRequest.set_quorum(1);
         getRequest.set_consistency_level(1);
 
         Status getStatus = keyValueClient->GetFromDB(getRequest, &getReply);

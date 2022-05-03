@@ -9,7 +9,7 @@
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
 #include "../util/common.h"
-
+#include "../util/locks.h"
 /******************************************************************************
  * NAMESPACES
  *****************************************************************************/
@@ -32,6 +32,7 @@ using namespace std;
 unordered_map<string, pair<int, KeyValueClient*>> g_nodeList; // <ip: <id, stub>>
 string leaderIP;
 int g_currentTerm = 0;
+atomic<int> successCount;
 
 /******************************************************************************
  * DECLARATION
@@ -43,7 +44,6 @@ class KeyValueService final : public KeyValueOps::Service
 {
 private:
     int idx = 0; 
-    unordered_map<string, int> _valCountMap; // <value:frequency> map
     /*
     *   @brief Gets server ip using round robin
     *
@@ -92,7 +92,7 @@ private:
         
         consistencyLevel = request->consistency_level();
         dbgprintf("[DEBUG}: Consistency level:%d\n", consistencyLevel);
-        if (consistencyLevel == STRONG_LEADER)
+        if (consistencyLevel == STRONG)
         {
             stub = getLeaderStub();
             dbgprintf("[DEBUG}: Calling stub for leader\n");
@@ -106,26 +106,40 @@ private:
             }
         }
 
-        else if (consistencyLevel == STRONG_MAJORITY)
+        else 
         {
+            int quorum = request->quorum();
+            dbgprintf("Req quorum of %d\n", quorum);
+        
+            successCount = 0;   
+            set<string> readVals;
             // iterate over g_nodeList
             for(auto& node: g_nodeList) 
             {
-                std::thread(&KeyValueService::invokeGetFromDB, this, node.second.second, request, reply).detach();
+                std::thread(&KeyValueService::invokeGetFromDB, this, node.first,
+                        node.second.second, &readVals, &successCount, request, reply).detach();
             }
 
             do{
                 // wait for majority
             }
-            while(!receivedMajorityValue());
+            while(!receivedQuorum(quorum, &successCount));
+            
+            dbgprintf("Recvd quorum\n");
+            successCount = -1;
 
-            reply->set_value(getMajorityResp());
+            ValueString* values;
+            for(string v: readVals)
+            {   
+                values = reply->add_values();
+                values->set_value(v);
+            }
+            dbgprintf("readVals len %ld\n",readVals.size());
+            // sleep(2);
+            dbgprintf("Waking up\n");
             return Status::OK;
         }
-        else { 
-            stub = getServerIPToRouteTo();
-            return stub->GetFromDB(*request, reply);
-        }    
+        return Status::OK;
     }
 
     /*
@@ -133,11 +147,11 @@ private:
     *          
     *   @return majority count
     */
-    int GetMajorityCount() // TODO: Move to util
-    {
-        int size = g_nodeList.size();
-        return (size % 2 == 0) ? (size / 2) : (size / 2) + 1;
-    }
+    // int GetMajorityCount() // TODO: Move to util
+    // {
+    //     int size = g_nodeList.size();
+    //     return (size % 2 == 0) ? (size / 2) : (size / 2) + 1;
+    // }
 
     /*
     *   @brief checks if majority responses have been received
@@ -146,24 +160,14 @@ private:
     *       true : on receiving majority or if there is only one node in the cluster
     *       false: otherwise
     */
-    bool receivedMajorityValue() // TODO: Move to util
+    bool receivedQuorum(int quorum, atomic<int>* successCount) // TODO: Move to util
     {
         // Leader is the only node alive
         if (g_nodeList.size() == 1) 
         {
             return true;
         }
-
-        int count = 0;
-        
-        for (auto& it: _valCountMap) {
-            int count = it.second;
-            if(count >= GetMajorityCount())
-            {
-                return true; // break on receiving majority
-            }
-        }
-        return false;
+        return ((*successCount) >= quorum);
     }
 
     /*
@@ -174,15 +178,26 @@ private:
     *   @param request
     *   @param reply
     */
-    void invokeGetFromDB(KeyValueClient* stub, const GetRequest* request, GetReply* reply)
+    void invokeGetFromDB(string raftIp, KeyValueClient* stub, set<string>* readVals, 
+                     atomic<int>* successCount, const GetRequest* request, GetReply* reply)
     {
         Status status = stub->GetFromDB(*request, reply);
-        if (status.ok())
+        dbgprintf("returned reply from ip %s\n", raftIp.c_str());
+        int c = (*successCount);
+        dbgprintf("success count %d", c);
+
+
+        if (status.ok() && successCount>=0)
         {
-            string value = reply->value();
-            int count = _valCountMap[value];
-            _valCountMap[value] = count + 1;
+            (*successCount)++;
+            dbgprintf("Incremented\n");
+            for(int i=0;i<reply->values_size();i++) {
+                string v = reply->values(i).value();
+                readVals->insert(v);
+            }
         }
+        
+        dbgprintf("Exiting for ip %s\n", raftIp.c_str());
     }
 
     /*
@@ -190,21 +205,21 @@ private:
     * 
     *   @return value
     */
-    string getMajorityResp() {
-        int max = 0;
-        string value;
+    // string getMajorityResp() {
+    //     int max = 0;
+    //     string value;
 
-        for(auto valCount: _valCountMap)
-        {
-            if(valCount.second > max) 
-            {
-                max = valCount.second;
-                value = valCount.first;
-            }
-        }
+    //     for(auto valCount: _valCountMap)
+    //     {
+    //         if(valCount.second > max) 
+    //         {
+    //             max = valCount.second;
+    //             value = valCount.first;
+    //         }
+    //     }
 
-        return value;
-    }
+    //     return value;
+    // }
     
     /*
     *   @brief receive client request from client

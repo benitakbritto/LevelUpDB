@@ -107,6 +107,9 @@ grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const Get
 {
     cout << "[INFO] Received Get request" << endl;
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+
+    ValueString* values = reply->add_values();
+    values->set_value("v1");
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
     return grpc::Status::OK;
 }
@@ -430,11 +433,10 @@ void RaftServer::runForElection()
     /* Send RequestVote RPCs to all servers */
     for (auto& node: g_nodeList) {
         if (node.first != GetMyIp()) {
-            
-	 std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
-        // TODO: try without threads
-	//invokeRequestVote(node.first);
-	}
+	        std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
+            // TODO: try without threads
+	        //invokeRequestVote(node.first);
+	    }
     }
 
     dbgprintf("[DEBUG] %s: Going to sleep for 2 seconds\n", __func__);    
