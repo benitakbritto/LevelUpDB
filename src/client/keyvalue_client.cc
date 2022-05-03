@@ -49,18 +49,18 @@ int main(int argc, char** argv)
     auto resAllocStub = ResAlloc::NewStub(grpc::CreateChannel(string(argv[2]), grpc::InsecureChannelCredentials()));
 
     // Test AddServer
-    // ClientContext addServercontext;
-    // AddServerRequest addServerRequest;
-    // AddServerReply addServerReply;
-    // Status addServerStatus = resAllocStub->AddServer(&addServercontext, addServerRequest, &addServerReply);
-    // cout << "status = " << addServerStatus.error_code() << endl;
+    ClientContext addServercontext;
+    AddServerRequest addServerRequest;
+    AddServerReply addServerReply;
+    Status addServerStatus = resAllocStub->AddServer(&addServercontext, addServerRequest, &addServerReply);
+    cout << "status = " << addServerStatus.error_code() << endl;
     
     // Test DeleteServer
-    ClientContext deleteServerContext;
-    DeleteServerRequest deleteServerRequest;
-    DeleteServerReply deleteServerReply;
-    Status deleteServerStatus = resAllocStub->DeleteServer(&deleteServerContext, deleteServerRequest, &deleteServerReply);
-    cout << "status = " << deleteServerStatus.error_code() << endl;
+    // ClientContext deleteServerContext;
+    // DeleteServerRequest deleteServerRequest;
+    // DeleteServerReply deleteServerReply;
+    // Status deleteServerStatus = resAllocStub->DeleteServer(&deleteServerContext, deleteServerRequest, &deleteServerReply);
+    // cout << "status = " << deleteServerStatus.error_code() << endl;
 
     return 0;
 }

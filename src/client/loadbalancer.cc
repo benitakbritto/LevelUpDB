@@ -129,20 +129,45 @@ class Helper {
         // TODO: wake the dead ports
         pair<string, string> GenerateKvAndRaftIp(int index)
         {
-            vector<int> portsInUse;
+            vector<int> alivePorts;
+            vector<int> deadKvPorts;
+            vector<int> deadRaftPorts;
+            string ip;
+            string newKvIp;
+            string newRaftIp;
+            
             for (auto itr = g_nodeList.begin(); itr != g_nodeList.end(); itr++)
             {
                 string raftIp = itr->first;
                 string kvIp = itr->second.kvIp;
-                portsInUse.push_back(GetPort(raftIp));
-                portsInUse.push_back(GetPort(kvIp));
+                if (itr->second.status == ALIVE)
+                {
+                    alivePorts.push_back(GetPort(raftIp));
+                    alivePorts.push_back(GetPort(kvIp));
+                }
+                else
+                {
+                    deadRaftPorts.push_back(GetPort(raftIp));
+                    deadKvPorts.push_back(GetPort(kvIp));
+                } 
             }
 
-            sort(portsInUse.begin(), portsInUse.end(), greater<int>()); // desc order
-            
-            string ip = GetNodeIpFromIndex(index);
-            string newKvIp = ip + ":" + to_string(portsInUse[0] + 1);
-            string newRaftIp = ip + ":" + to_string(portsInUse[0] + 2);
+            ip = GetNodeIpFromIndex(index); // without port
+
+            // Use the dead ports, if any
+            if (deadKvPorts.size() != 0 && deadRaftPorts.size() != 0)
+            {
+                newKvIp = deadKvPorts[0];
+                newRaftIp = deadRaftPorts[0];
+            }   
+            // generate port by adding +1/+2 to the max port in use         
+            else
+            {
+                sort(alivePorts.begin(), alivePorts.end(), greater<int>()); // desc order
+                newKvIp = ip + ":" + to_string(alivePorts[0] + 1);
+                newRaftIp = ip + ":" + to_string(alivePorts[0] + 2);
+            }
+
             dbgprintf("[DEBUG] %s: newKvIp = %s | newRaftIp = %s\n", __func__, newKvIp.c_str(), newRaftIp.c_str());
             return make_pair(newKvIp, newRaftIp);
         }
@@ -593,7 +618,6 @@ private:
     int _index = 0;
    
 public:
-    // TODO
     /*
     *   @brief adds another server by calling resAlloc stub
     *
@@ -626,7 +650,6 @@ public:
         return stub->AddServer(&clientContext, request, &reply);
     }
 
-    // TODO
     /*
     *   @brief deletes a server by calling resAlloc stub
     *
