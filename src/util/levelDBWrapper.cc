@@ -5,7 +5,7 @@ Status LevelDBWrapper::Get(string key, string &value) {
     if (s.ok()) {
         dbgprintf("[INFO]: Key-Value Pair found\n");
     } else {
-        cout << "[ERROR]: Read Failed" << s.ToString() << endl;
+        cout << "[ERROR]: Read Failed : " << s.ToString() << endl;
     }
     return s;
 }
@@ -15,7 +15,7 @@ Status LevelDBWrapper::Put(string key, string value) {
     if (s.ok()) {
         dbgprintf("[INFO]: Key-Value Pair found\n");
     } else {
-        cout << "[ERROR]: Write Failed" << s.ToString() << endl;
+        cout << "[ERROR]: Write Failed : " << s.ToString() << endl;
     }
     return s;
 }
@@ -23,10 +23,10 @@ Status LevelDBWrapper::Put(string key, string value) {
 /*
 *   @brief Uncomment to test LevelDBWrapper
 */
-int main(){
+// int main(){
     // LevelDBWrapper levelDBWrapper;
     // Status s = levelDBWrapper.Put("k1","v1");
     // if (!s.ok()) {
     //     throw ("[ERROR]: Cannot test LEVELDB");
     // }
-}
+// }

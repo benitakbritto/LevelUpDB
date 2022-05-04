@@ -40,7 +40,6 @@ private:
   MutexMap _lockHelper;
   string _myIp;
 
-  LevelDBWrapper _levelDBWrapper;
   int _hostCount;
   atomic<int> _votesGained;
   int _electionTimeout;
