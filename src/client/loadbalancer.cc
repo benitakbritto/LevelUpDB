@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <mutex>  
 #include <grpcpp/grpcpp.h>
 #include "keyvalueops.grpc.pb.h"
 #include "lb.grpc.pb.h"
@@ -30,9 +31,11 @@ using namespace std;
  * GLOBALS
  *****************************************************************************/
 unordered_map<string, pair<int, KeyValueClient*>> g_nodeList; // <ip: <id, stub>>
+unordered_map<int, pair<int, bool>> g_reqSuccessMap; // <id: <success count: quorum reached> > 
 string leaderIP;
 int g_currentTerm = 0;
-atomic<int> successCount;
+mutex g_mtx;  
+atomic<int> g_currentReqId = 0; // Monotonically increasing counter
 
 /******************************************************************************
  * DECLARATION
@@ -110,23 +113,25 @@ private:
         {
             int quorum = request->quorum();
             dbgprintf("Req quorum of %d\n", quorum);
-        
-            successCount = 0;   
+         
+            int reqId = ++g_currentReqId;
+            g_reqSuccessMap[reqId] = make_pair(0, false);
             set<string> readVals;
+
             // iterate over g_nodeList
             for(auto& node: g_nodeList) 
             {
-                std::thread(&KeyValueService::invokeGetFromDB, this, node.first,
-                        node.second.second, &readVals, &successCount, request, reply).detach();
+                std::thread(&KeyValueService::invokeGetFromDB, this, request->key(),
+                        node.second.second, reqId, &readVals, quorum).detach();
             }
 
             do{
                 // wait for majority
             }
-            while(!receivedQuorum(quorum, &successCount));
-            
+            while(!receivedQuorum(reqId, quorum));
+
             dbgprintf("Recvd quorum\n");
-            successCount = -1;
+            g_reqSuccessMap[reqId] = make_pair(quorum, true);
 
             ValueString* values;
             for(string v: readVals)
@@ -134,9 +139,6 @@ private:
                 values = reply->add_values();
                 values->set_value(v);
             }
-            dbgprintf("readVals len %ld\n",readVals.size());
-            // sleep(2);
-            dbgprintf("Waking up\n");
             return Status::OK;
         }
         return Status::OK;
@@ -160,14 +162,9 @@ private:
     *       true : on receiving majority or if there is only one node in the cluster
     *       false: otherwise
     */
-    bool receivedQuorum(int quorum, atomic<int>* successCount) // TODO: Move to util
+    bool receivedQuorum(int reqId, int quorum) // TODO: Move to util
     {
-        // Leader is the only node alive
-        if (g_nodeList.size() == 1) 
-        {
-            return true;
-        }
-        return ((*successCount) >= quorum);
+        return (g_reqSuccessMap[reqId].first >= quorum);    
     }
 
     /*
@@ -178,26 +175,25 @@ private:
     *   @param request
     *   @param reply
     */
-    void invokeGetFromDB(string raftIp, KeyValueClient* stub, set<string>* readVals, 
-                     atomic<int>* successCount, const GetRequest* request, GetReply* reply)
+    void invokeGetFromDB(string key, KeyValueClient* stub, int reqId, set<string>* readVals, 
+                    int quorum)
     {
-        Status status = stub->GetFromDB(*request, reply);
-        dbgprintf("returned reply from ip %s\n", raftIp.c_str());
-        int c = (*successCount);
-        dbgprintf("success count %d", c);
+        GetRequest request;
+        GetReply reply;
+        request.set_key(key);
+        Status status = stub->GetFromDB(request, &reply);
 
-
-        if (status.ok() && successCount>=0)
+        if (status.ok())
         {
-            (*successCount)++;
-            dbgprintf("Incremented\n");
-            for(int i=0;i<reply->values_size();i++) {
-                string v = reply->values(i).value();
+            g_mtx.lock();
+            int successCount = g_reqSuccessMap[reqId].first;
+            if (successCount < quorum) {
+                g_reqSuccessMap[reqId] = make_pair(successCount + 1, false);
+                string v = reply.values(0).value();
                 readVals->insert(v);
             }
+            g_mtx.unlock();            
         }
-        
-        dbgprintf("Exiting for ip %s\n", raftIp.c_str());
     }
 
     /*
