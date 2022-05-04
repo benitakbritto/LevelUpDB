@@ -1,5 +1,6 @@
 #include "client.h"
 #include <iostream>
+#include <stdlib.h>
 #include <memory>
 #include <string>
 #include <grpcpp/grpcpp.h>
@@ -22,16 +23,17 @@ using namespace kvstore;
 /******************************************************************************
  * DRIVER
  *****************************************************************************/
-// @usage for put: ./keyvalue_client <ip of lb with port> p <key> <val>
-// @usage for get: ./keyvalue_client <ip of lb with port> g <key>
+// @usage for put:                              ./keyvalue_client <ip of lb with port> -p <key> <val>
+// @usage for get with strong consistency:      ./keyvalue_client <ip of lb with port> -g <key> 0
+// @usage for get with eventual consistency:    ./keyvalue_client <ip of lb with port> -g <key> 1 <quorum>
 int main(int argc, char** argv) 
 {
     string target_str = string(argv[1]);
     KeyValueClient* keyValueClient = new KeyValueClient(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
     
-    char* op = argv[2];
+    string operation = argv[2];
 
-    if(*op == 'p')
+    if(operation.compare("-p")==0)
     {
         // Test Put
         PutRequest putRequest;
@@ -45,13 +47,25 @@ int main(int argc, char** argv)
     }
 
     else {
-    // Test Get
+        // Test Get
         GetRequest getRequest;
         GetReply getReply;
+        string key;
+        int consistencyLevel;
+        int quorum;
 
-        getRequest.set_key(argv[3]);
-        getRequest.set_quorum(2);
-        getRequest.set_consistency_level(1);
+        key = argv[3];
+        consistencyLevel = stoi(argv[4]); 
+
+        if(consistencyLevel==1) 
+        {   // eventual consistency
+            quorum = stoi(argv[5]);
+
+        }
+        
+        getRequest.set_key(key);
+        getRequest.set_consistency_level(consistencyLevel);
+        getRequest.set_quorum(quorum);
 
         Status getStatus = keyValueClient->GetFromDB(getRequest, &getReply);
         cout << "Error code: " << getStatus.error_code() << endl;
@@ -60,7 +74,6 @@ int main(int argc, char** argv)
         {
             cout << getReply.values(i).value() << endl;
         }
-
 
     }
     return 0;
