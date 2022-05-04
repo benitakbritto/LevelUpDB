@@ -66,6 +66,7 @@ RaftServer serverImpl;
 unordered_map <string, pair<int, unique_ptr<Raft::Stub>>> g_nodeList;
 RaftServer* signalHandlerService;
 LBNodeCommClient* lBNodeCommClient; 
+LevelDBWrapper g_levelDBWrapper;
 
 // for debug
 void PrintNodesInNodeList()
@@ -105,8 +106,13 @@ string getRaftIp(string kvServerIp)
 // TODO: use leveldb
 grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const GetRequest* request, GetReply* reply) 
 {
-    cout << "[INFO] Received Get request" << endl;
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
+    string key = request->key();
+    string value;
+    leveldb::Status s = g_levelDBWrapper.Get(key, value);
+
+    ValueString* values = reply->add_values();
+    values->set_value(value);
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
     return grpc::Status::OK;
 }
@@ -430,11 +436,10 @@ void RaftServer::runForElection()
     /* Send RequestVote RPCs to all servers */
     for (auto& node: g_nodeList) {
         if (node.first != GetMyIp()) {
-            
-	 std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
-        // TODO: try without threads
-	//invokeRequestVote(node.first);
-	}
+	        std::thread(&RaftServer::invokeRequestVote, this, node.first).detach();
+            // TODO: try without threads
+	        //invokeRequestVote(node.first);
+	    }
     }
 
     dbgprintf("[DEBUG] %s: Going to sleep for 2 seconds\n", __func__);    
@@ -889,8 +894,8 @@ void RaftServer::ExecuteCommands(int start, int end)
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for(int i = start; i <= end; i++)
-    {   // TODO: Uncomment after pulling cmake changes for leveldb from main 
-        // levelDBWrapper.Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
+    {   
+        leveldb::Status status = g_levelDBWrapper.Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
         // TODO: check failure
         g_stateHelper.SetLastAppliedIndex(i); 
     }

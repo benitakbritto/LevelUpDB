@@ -11,9 +11,15 @@ service KeyValueOps
 message GetRequest {
     string key = 1;
     uint32 consistency_level = 2;
+    uint32 quorum = 3;
 }
 
 message GetReply {
+    string value = 1;
+    repeated ValueString values = 2;
+}
+
+message ValueString {
     string value = 1;
 }
 
