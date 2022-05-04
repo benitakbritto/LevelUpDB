@@ -22,8 +22,8 @@ using namespace kvstore;
 /******************************************************************************
  * DRIVER
  *****************************************************************************/
-// @usage for put: ./keyvalue_client <ip of lb with port> p 
-// @usage for get: ./keyvalue_client <ip of lb with port> g 
+// @usage for put: ./keyvalue_client <ip of lb with port> p <key> <val>
+// @usage for get: ./keyvalue_client <ip of lb with port> g <key>
 int main(int argc, char** argv) 
 {
     string target_str = string(argv[1]);
@@ -37,11 +37,11 @@ int main(int argc, char** argv)
         PutRequest putRequest;
         PutReply putReply;
 
-        putRequest.set_key("k1");
-        putRequest.set_value("v1");
+        putRequest.set_key(argv[3]);
+        putRequest.set_value(argv[4]);
 
         Status putStatus = keyValueClient->PutToDB(putRequest, &putReply);
-        cout << putStatus.error_code() << endl;
+        cout << "Error code: " << putStatus.error_code() << endl;
     }
 
     else {
@@ -49,17 +49,19 @@ int main(int argc, char** argv)
         GetRequest getRequest;
         GetReply getReply;
 
-        getRequest.set_key("k1");
-        getRequest.set_quorum(1);
+        getRequest.set_key(argv[3]);
+        getRequest.set_quorum(2);
         getRequest.set_consistency_level(1);
 
         Status getStatus = keyValueClient->GetFromDB(getRequest, &getReply);
-        cout << getStatus.error_code() << endl;
+        cout << "Error code: " << getStatus.error_code() << endl;
         
         for(int i=0; i < getReply.values().size(); i++)
         {
             cout << getReply.values(i).value() << endl;
         }
+
+
     }
     return 0;
 }
