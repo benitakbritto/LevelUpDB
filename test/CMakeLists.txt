@@ -49,7 +49,8 @@ target_link_libraries(client_lib
 
 # For client tests  
 foreach(_target
-  read)
+  read
+  write)
   add_executable(${_target} "./${_target}.cc")
   target_link_libraries(${_target}
     keyvalueops_grpc_proto
