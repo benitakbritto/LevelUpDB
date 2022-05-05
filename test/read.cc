@@ -6,6 +6,7 @@
  *                -i <iter> 
  *                -t <testCase> 
  *                -l <consistency level> 
+ *                -q <quorum size (only for eventual consistency)>
  *                -w <number of workers
  * where TODO
  *  
@@ -61,9 +62,9 @@ using namespace kvstore;
  * PROTOTYPES
  *****************************************************************************/
 void printTime(nanoseconds elapsed_time);
-void testSingleRead(string key, int consistencyLevel, int iterations);
-void testConcurrentReadOnSameKey(string key, int consistencyLevel, int iterations, int numOfWorkers);
-void testConcurrentReadOnDifferentKey(string startKey, int consistencyLevel, int iterations, int numOfWorkers);
+void testSingleRead(string key, int consistencyLevel, int quorumSize, int iterations);
+void testConcurrentReadOnSameKey(string key, int consistencyLevel, int quorumSize, int iterations, int numOfWorkers);
+void testConcurrentReadOnDifferentKey(string startKey, int consistencyLevel, int quorumSize, int iterations, int numOfWorkers);
 void putKeyIfNotExists(string key);
 string generateValue();
 
@@ -82,9 +83,10 @@ int main(int argc, char** argv)
     int consistencyLevel = -1;
     char c = '\0';
     int numOfWorkers = 0;
+    int quorumSize = 0;
 
     // Get command line args
-    while ((c = getopt(argc, argv, "k:i:t:l:w:")) != -1)
+    while ((c = getopt(argc, argv, "k:i:t:l:w:q:")) != -1)
     {
         switch (c)
         {
@@ -103,6 +105,9 @@ int main(int argc, char** argv)
             case 'w':
                 numOfWorkers = stoi(optarg);
                 break;
+            case 'q':
+                quorumSize = stoi(optarg);
+                break;
             default:
                 cout << "Invalid arg" << endl;
                 return -1;
@@ -115,15 +120,15 @@ int main(int argc, char** argv)
     {
         case SINGLE_READ:
             cout << "Testing Single Read" << endl;
-            testSingleRead(key, consistencyLevel, iterations);
+            testSingleRead(key, consistencyLevel, quorumSize, iterations);
             break;
         case CONCURRENT_READ_SAME:
             cout << "Testing Concurrent Read on same key" << endl;
-            testConcurrentReadOnSameKey(key, consistencyLevel, iterations, numOfWorkers);
+            testConcurrentReadOnSameKey(key, consistencyLevel, quorumSize, iterations, numOfWorkers);
             break;
         case CONCURRENT_READ_DIFF:
             cout << "Testing Concurrent Read on different keys" << endl;
-            testConcurrentReadOnDifferentKey(key, consistencyLevel, iterations, numOfWorkers);
+            testConcurrentReadOnDifferentKey(key, consistencyLevel, quorumSize, iterations, numOfWorkers);
             break;
         default:
             cout << "Invalid arg" << endl;
@@ -141,7 +146,7 @@ void printTime(nanoseconds elapsed_time)
     cout << (elapsed_time.count() / 1e6) << endl;
 }
 
-void testSingleRead(string key, int consistencyLevel, int iterations)
+void testSingleRead(string key, int consistencyLevel, int quorumSize, int iterations)
 {
     putKeyIfNotExists(key);
 
@@ -151,6 +156,7 @@ void testSingleRead(string key, int consistencyLevel, int iterations)
 
     getRequest.set_key(key);
     getRequest.set_consistency_level(consistencyLevel);
+    getRequest.set_quorum(quorumSize);
 
     for (int i = 0; i < iterations; i++)
     {
@@ -158,25 +164,27 @@ void testSingleRead(string key, int consistencyLevel, int iterations)
         getStatus = keyValueClient->GetFromDB(getRequest, &getReply);
         auto end = steady_clock::now();
 
-        nanoseconds elapsedTime = end - start;
-        printTime(elapsedTime);
-
         if (getStatus.error_code() != 0)
         {
             cout << "[ERROR] " << __func__ << " failed. Stopping test." << endl;
             return;
         }
+        else
+        {
+            nanoseconds elapsedTime = end - start;
+            printTime(elapsedTime);
+        }
     }
 }
 
-void testConcurrentReadOnSameKey(string key, int consistencyLevel, int iterations, int numOfWorkers)
+void testConcurrentReadOnSameKey(string key, int consistencyLevel, int quorumSize, int iterations, int numOfWorkers)
 {
     future<void> workers[numOfWorkers];
     putKeyIfNotExists(key);
 
     for (int i = 0; i < numOfWorkers; i++) 
     {
-        workers[i] = async(testSingleRead, key, consistencyLevel, iterations); 
+        workers[i] = async(testSingleRead, key, consistencyLevel, quorumSize, iterations); 
     }
 
     for(int i = 0; i < numOfWorkers; i++) 
@@ -185,7 +193,7 @@ void testConcurrentReadOnSameKey(string key, int consistencyLevel, int iteration
     }
 }
 
-void testConcurrentReadOnDifferentKey(string startKey, int consistencyLevel, int iterations, int numOfWorkers)
+void testConcurrentReadOnDifferentKey(string startKey, int consistencyLevel, int quorumSize, int iterations, int numOfWorkers)
 {
     string key = "";
     future<void> workers[numOfWorkers];
@@ -194,7 +202,7 @@ void testConcurrentReadOnDifferentKey(string startKey, int consistencyLevel, int
     {
         key = startKey + to_string(i);
         putKeyIfNotExists(key);
-        workers[i] = async(testSingleRead, key, consistencyLevel, iterations); 
+        workers[i] = async(testSingleRead, key, consistencyLevel, quorumSize, iterations); 
     }
 
     for(int i = 0; i < numOfWorkers; i++) 
@@ -212,6 +220,7 @@ void putKeyIfNotExists(string key)
 
     getRequest.set_key(key);
     getRequest.set_consistency_level(0);
+    getRequest.set_quorum(0);
 
     getStatus = keyValueClient->GetFromDB(getRequest, &getReply);
     // TODO: Check what is being returned if key does not exist

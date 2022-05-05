@@ -154,13 +154,15 @@ void testSingleWrite(string key, int valueSize, int iterations)
         putStatus = keyValueClient->PutToDB(putRequest, &putReply);
         auto end = steady_clock::now();
 
-        nanoseconds elapsedTime = end - start;
-        printTime(elapsedTime);
-
         if (putStatus.error_code() != 0)
         {
             cout << "[ERROR] " << __func__ << " failed. Stopping test." << endl;
             return;
+        }
+        else
+        {
+            nanoseconds elapsedTime = end - start;
+            printTime(elapsedTime);
         }
     }
 }
