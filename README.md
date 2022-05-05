@@ -36,6 +36,20 @@ Clone and follow the commands mentioned [here](https://github.com/google/snappy)
 ./keyvalue_client <ip of lb with port>
 ```
 
+To run Test
+```
+cd test
+chmod 777 build.sh
+chmod 777 clean.sh
+chmod run_read_test.sh
+chmod run_write_test.sh
+./build
+./run_read_test
+./run_write_test
+```
+Results will be redirected to /results
+Note: The `run_read_test` and `run_write_test` assume that the lb kv ip is `0.0.0.0:50051`.
+
 
 ## Assumptions
 0. No network partitions : We can safely use matchIndex as the prevLogIndex, no follower would have a commitIndex > leaderCommitIndex
