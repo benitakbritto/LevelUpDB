@@ -77,7 +77,7 @@ public:
   void Run();
   void Wait();
   void ServerInit();
-  void BroadcastAppendEntries(atomic<int>* successCount);
+  void BroadcastAppendEntries(atomic<int>* successCount, int logLengthForBroadcast);
   bool ReceivedMajority(atomic<int>* successCount);
   void ExecuteCommands(int start, int end);
   void BuildSystemStateFromHBReply(HeartBeatReply reply);

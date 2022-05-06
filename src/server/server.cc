@@ -119,8 +119,10 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
     g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), request->key(), request->value()); 
 
     atomic<int> successCount;
-    successCount = 1;       
-    serverImpl.BroadcastAppendEntries(&successCount);
+    successCount = 1;
+    int logLengthForThisBroadcast = g_stateHelper.GetLogLength();
+
+    serverImpl.BroadcastAppendEntries(&successCount, logLengthForThisBroadcast);
             
     // wait for majority
     do 
@@ -129,7 +131,7 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
         sleep(1);
     } while(!serverImpl.ReceivedMajority(&successCount));
             
-    g_stateHelper.SetCommitIndex(g_stateHelper.GetLogLength()-1);
+    g_stateHelper.SetCommitIndex(logLengthForThisBroadcast-1);
     serverImpl.ExecuteCommands(g_stateHelper.GetLastAppliedIndex() + 1, g_stateHelper.GetCommitIndex());
             
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
@@ -584,8 +586,8 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
     else if(reply.success())
     {
         dbgprintf("[DEBUG] %s: RPC sucess\n", __func__);
-        g_stateHelper.SetMatchIndex(followerIp, g_stateHelper.GetLogLength()-1);
-        g_stateHelper.SetNextIndex(followerIp, g_stateHelper.GetLogLength());
+        g_stateHelper.SetMatchIndex(followerIp, logLengthForBroadcast-1);
+        g_stateHelper.SetNextIndex(followerIp, logLengthForBroadcast);
         if(successCount!=nullptr)
         {
             (*successCount)++;
@@ -634,10 +636,9 @@ bool RaftServer::requestVote(Raft::Stub* stub) {
 *   @brief  Leader broadcasts  by creating threads for each node,
 *           stops if it learns it is no longer the leader
 */ 
-void RaftServer::BroadcastAppendEntries(atomic<int>* successCount) 
+void RaftServer::BroadcastAppendEntries(atomic<int>* successCount, int logLengthForThisBroadcast) 
 {
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
-    int logLengthForThisBroadcast = g_stateHelper.GetLogLength();
     for (auto& node: g_nodeList) 
     {
         if (node.first != _myIp) 
@@ -687,7 +688,7 @@ void RaftServer::invokePeriodicAppendEntries()
     while (g_stateHelper.GetIdentity() == LEADER)
     {
         dbgprintf("[INFO] %s: Raising periodic Append Entries\n", __func__);
-        BroadcastAppendEntries(nullptr);
+        BroadcastAppendEntries(nullptr, g_stateHelper.GetLogLength());
         sleep(HB_SLEEP_IN_SEC);
     }
 }
