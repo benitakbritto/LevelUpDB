@@ -66,7 +66,7 @@ RaftServer serverImpl;
 unordered_map <string, pair<int, unique_ptr<Raft::Stub>>> g_nodeList;
 RaftServer* signalHandlerService;
 LBNodeCommClient* lBNodeCommClient; 
-LevelDBWrapper g_levelDBWrapper;
+LevelDBWrapper* g_levelDBWrapper;
 
 // for debug
 void PrintNodesInNodeList()
@@ -109,7 +109,8 @@ grpc::Status KeyValueOpsServiceImpl::GetFromDB(ServerContext* context, const Get
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     string key = request->key();
     string value;
-    leveldb::Status s = g_levelDBWrapper.Get(key, value);
+
+    leveldb::Status s = g_levelDBWrapper->Get(key, value);
 
     ValueString* values = reply->add_values();
     values->set_value(value);
@@ -895,7 +896,7 @@ void RaftServer::ExecuteCommands(int start, int end)
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for(int i = start; i <= end; i++)
     {   
-        leveldb::Status status = g_levelDBWrapper.Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
+        leveldb::Status status = g_levelDBWrapper->Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
         // TODO: check failure
         g_stateHelper.SetLastAppliedIndex(i); 
     }
@@ -1013,7 +1014,7 @@ int main(int argc, char **argv)
     g_stateHelper = *(new StateHelper(argv[1]));
     g_stateHelper.SetIdentity(FOLLOWER);
     serverImpl.SetMyIp(argv[2]);
-    
+    g_levelDBWrapper =  new LevelDBWrapper(argv[2]);
     std::thread(RunKeyValueServer, argv[1]).detach();
     std::thread(StartHB, argv[1], argv[2], argv[3]).detach();
     std::thread(RunRaftServer, argv[2]).detach();

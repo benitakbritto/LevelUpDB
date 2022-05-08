@@ -25,9 +25,12 @@ class LevelDBWrapper {
     ReadOptions read_options;
     
     public:
-    LevelDBWrapper(){
+    LevelDBWrapper(){}
+
+    LevelDBWrapper(string ip) 
+    {
         options.create_if_missing = true;
-        leveldb::Status status = DB::Open(options, "/tmp/testdb"+to_string(getpid()), &db);
+        leveldb::Status status = DB::Open(options, "/tmp/testdb" + ip, &db);
         assert(status.ok());
         write_options.sync = true;
     }
