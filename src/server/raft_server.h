@@ -64,7 +64,8 @@ private:
 
   void setNextIndexToLeaderLastIndex();
   void setMatchIndexToLeaderLastIndex();
-
+  void writeNoOp();
+  
   AppendEntriesRequest prepareRequestForAppendEntries(string followerip, int nextIndex, int logLengthForBroadcast);
 
   int GetMajorityCount();

@@ -678,10 +678,18 @@ void RaftServer::becomeLeader()
     // inform LB
     lBNodeCommClient->InvokeAssertLeadership();
 
+    writeNoOp();
     // to maintain leadership
     thread(&RaftServer::invokePeriodicAppendEntries, this).detach();
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
+}
+
+void RaftServer::writeNoOp()
+{
+    dbgprintf("[DEBUG]: Entering %s\n", __func__);
+    g_stateHelper.Append(g_stateHelper.GetCurrentTerm(), "", "");  //blank key-value pair
+    dbgprintf("[DEBUG]: Exiting %s\n", __func__);
 }
 
 /*
@@ -895,8 +903,18 @@ void RaftServer::ExecuteCommands(int start, int end)
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for(int i = start; i <= end; i++)
     {   
-        leveldb::Status status = g_levelDBWrapper.Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
-        // TODO: check failure
+        string key = g_stateHelper.GetKeyAtIndex(i);
+        string value = g_stateHelper.GetValueAtIndex(i);
+        if(!key.empty())
+        {
+            leveldb::Status status = g_levelDBWrapper.Put(key, value);
+            // TODO: check failure
+        }
+        else
+        {
+            dbgprintf("[DEBUG]: Skip no op\n");
+        }
+
         g_stateHelper.SetLastAppliedIndex(i); 
     }
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
