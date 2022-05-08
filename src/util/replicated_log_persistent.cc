@@ -1,8 +1,7 @@
-// TODO: Reader-writer locks
-// TODO: Add to cmake
-
 #include "replicated_log_persistent.h"
 #include <sys/types.h>
+
+string log_file_path = "";
 
 /*
 *   @brief Default constructor
@@ -14,7 +13,7 @@ PersistentReplicatedLog::PersistentReplicatedLog() {}
 */
 PersistentReplicatedLog::PersistentReplicatedLog(string ip)
 {
-    string log_file_path = REPLICATED_LOG_PATH + ip;
+    log_file_path = REPLICATED_LOG_PATH + ip;
     fd = open(log_file_path.c_str(), O_WRONLY | O_CREAT, 0666);
 
     if (fd == -1) 
@@ -170,7 +169,7 @@ vector<PLogEntry> PersistentReplicatedLog::ParseLog()
 {
     dbgprintf("[DEBUG]: ParseLog - Entering function\n");
     vector<PLogEntry> ret;
-    ifstream file(REPLICATED_LOG_PATH);
+    ifstream file(log_file_path);
 
     if (file.is_open())
     {

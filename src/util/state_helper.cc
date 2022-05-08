@@ -186,11 +186,6 @@ void StateHelper::Init()
         if (entry.term > currentTerm) currentTerm = entry.term;
     }
 
-    if (GetLogLength() == 0)
-    {
-        Append(0, "NULL", "NULL");
-    }   
-
     vTermVoteObj.UpdateCurrentTerm(currentTerm);
 
     // Replicated log
@@ -204,6 +199,11 @@ void StateHelper::Init()
     // Set volatile states
     SetCommitIndex(0);
     SetLastAppliedIndex(0);
+
+    if (GetLogLength() == 0)
+    {
+        Append(0, "NULL", "NULL");
+    }   
 }
 
 /*

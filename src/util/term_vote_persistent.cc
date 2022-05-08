@@ -1,12 +1,12 @@
-// TODO: Add locks
-// TODO: Add to cmake
 #include "term_vote_persistent.h"
+
+string file_path = "";
 
 PersistentTermVote::PersistentTermVote() {}
 
 PersistentTermVote::PersistentTermVote(string ip)
 {
-    string file_path = TERM_VOTE_PATH + ip;
+    file_path = TERM_VOTE_PATH + ip;
     fd = open(file_path.c_str(), O_WRONLY |  O_APPEND | O_CREAT, 0666);
 
     if (fd == -1) 
@@ -87,7 +87,7 @@ vector<TVEntry> PersistentTermVote::ParseLog()
 {
     dbgprintf("[DEBUG]: ParseLog - Entering function\n");
     vector<TVEntry> ret;
-    ifstream file(TERM_VOTE_PATH);
+    ifstream file(file_path);
 
     if (file.is_open())
     {
