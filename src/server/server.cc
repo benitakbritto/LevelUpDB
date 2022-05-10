@@ -951,6 +951,8 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
                 reply->set_term(myCurrentTerm);
                 reply->set_vote_granted_for(true);
 
+                becomeFollower();
+
                 cout << "[ELECTION] Granted vote for " << request->candidate_id() << " for term " << request->term() << " Reason: Case A" << endl;
                 return grpc::Status::OK;
             }
@@ -963,6 +965,8 @@ grpc::Status RaftServer::ReqVote(ServerContext* context, const ReqVoteRequest* r
                     reply->set_term(myCurrentTerm);
                     reply->set_vote_granted_for(true);
         
+                    becomeFollower();
+
                     cout << "[ELECTION] Granted Reqvote from " << request->candidate_id() << " for term " << request->term() << " Reason: Case B"<<endl;            
                     return grpc::Status::OK;
                 }
