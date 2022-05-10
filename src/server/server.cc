@@ -783,7 +783,7 @@ void RaftServer::setAlarm(int after_ms) {
 
     int old_errno = errno;
     errno = 0;
-    setitimer(ITIMER_REAL, &timer, nullptr);
+    setitimer(ITIMER_REAL, &timer, NULL);
     if(errno) {
         dbgprintf("INFO] Setting timer failed\n");
     }
