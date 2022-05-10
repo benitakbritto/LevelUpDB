@@ -733,6 +733,8 @@ void RaftServer::setMatchIndexToLeaderLastIndex()
 void RaftServer::becomeFollower() 
 {
     g_stateHelper.SetIdentity(ServerIdentity::FOLLOWER);
+    resetElectionTimeout();
+    setAlarm(_electionTimeout);
 }
         
 /* 
