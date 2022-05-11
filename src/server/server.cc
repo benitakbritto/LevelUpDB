@@ -135,7 +135,7 @@ grpc::Status KeyValueOpsServiceImpl::PutToDB(ServerContext* context,const PutReq
     do 
     {
         dbgprintf("[DEBUG] %s: Waiting for majority\n", __func__);
-        sleep(1);
+        //sleep(1);
     } while(!serverImpl.ReceivedMajority(&successCount));
             
     g_stateHelper.SetCommitIndex(logLengthForThisBroadcast-1);
