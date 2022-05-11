@@ -597,7 +597,7 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
         if(successCount!=nullptr)
         {
             (*successCount)++;
-            cout<<"[DEBUG]: Append Entries Success - Success Count Incremented to"<<(*successCount)<<endl;
+            //cout<<"[DEBUG]: Append Entries Success - Success Count Incremented to"<<(*successCount)<<endl;
         }
     }
 
@@ -812,7 +812,7 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
                                             AppendEntriesReply *reply)
 {
     dbgprintf("[DEBUG]: AppendEntries - Entering RPC\n");
-    cout << "Append Entries RPC" << endl;
+    //cout << "Append Entries RPC" << endl;
     int my_term = 0;
 
     // Case 1: leader term < my term
@@ -820,7 +820,7 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
     if (request->term() < my_term)
     {
         // dbgprintf("[DEBUG]: AppendEntries RPC - leader term < my term\n");
-        cout << "[APPEND ENTRIES]: Rejected - term is behind" << endl;
+        //cout << "[APPEND ENTRIES]: Rejected - term is behind" << endl;
         reply->set_term(my_term);
         reply->set_success(false);
         return grpc::Status::OK;
@@ -835,7 +835,7 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
 
         if (g_stateHelper.GetIdentity() == ServerIdentity::CANDIDATE)
         {
-            cout << "[APPEND ENTRIES]: Candidate becomes Follower" << endl;
+            // cout << "[APPEND ENTRIES]: Candidate becomes Follower" << endl;
             // dbgprintf("[DEBUG]: AppendEntries RPC - Candidate received a valid AppendEntriesRPC, becoming follower\n");
             becomeFollower();
         }
@@ -843,7 +843,7 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
         // Check if term at log index matches
         if (g_stateHelper.GetTermAtIndex(request->prev_log_index()) != request->prev_log_term())
         {
-            cout << "[APPEND ENTRIES]: Log inconsistent, AppendEntries will be retried" << endl;
+            // cout << "[APPEND ENTRIES]: Log inconsistent, AppendEntries will be retried" << endl;
             // dbgprintf("[DEBUG]: AppendEntries RPC - term mismatch at log index\n");
             reply->set_term(my_term);
             reply->set_success(false);
@@ -851,7 +851,7 @@ grpc::Status RaftServer::AppendEntries(ServerContext* context,
         } 
         else 
         {   
-            cout << "[APPEND ENTRIES]: Log consistent, adding entries if any" << endl;
+            // cout << "[APPEND ENTRIES]: Log consistent, adding entries if any" << endl;
             // dbgprintf("[DEBUG]: AppendEntries RPC - No log inconsistencies\n");
             // Apply entries to log
             vector<Entry> entries;
