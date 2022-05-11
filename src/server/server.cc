@@ -265,9 +265,8 @@ void LBNodeCommClient::InvokeAssertLeadership()
         status = stub_->AssertLeadership(&context, request, &reply);
         dbgprintf("[DEBUG]: status code = %d\n", status.error_code());
         dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
-        retryCount++;
         sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
-
+        retryCount++;
     } while (status.error_code() == StatusCode::UNAVAILABLE);
 
     updateFollowersInNodeList(&reply);
@@ -565,8 +564,8 @@ void RaftServer::invokeAppendEntries(string followerIp, atomic<int>* successCoun
             status = stub->AppendEntries(&context, request, &reply);
             cout << "[DEBUG] "<< __func__ <<" status code = " << status.error_code() << " | IP = " << followerIp <<endl;
             dbgprintf("[DEBUG]: status message = %s\n", status.error_message().c_str());
-            retryCount++;
             sleep(RETRY_TIME_START * retryCount * RETRY_TIME_MULTIPLIER);
+            retryCount++;
 
         } while (status.error_code() == StatusCode::UNAVAILABLE && g_stateHelper.GetIdentity() == LEADER);
               
@@ -899,8 +898,7 @@ void RaftServer::ExecuteCommands(int start, int end)
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for(int i = start; i <= end; i++)
     {   
-        // TODO: Uncomment
-        // leveldb::Status status = g_levelDBWrapper->Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
+        leveldb::Status status = g_levelDBWrapper->Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
         // TODO: check failure
         g_stateHelper.SetLastAppliedIndex(i); 
     }
