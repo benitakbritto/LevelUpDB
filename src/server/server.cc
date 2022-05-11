@@ -681,7 +681,7 @@ void RaftServer::becomeLeader()
     lBNodeCommClient->InvokeAssertLeadership();
 
     // to maintain leadership
-    thread(&RaftServer::invokePeriodicAppendEntries, this).detach();
+    //thread(&RaftServer::invokePeriodicAppendEntries, this).detach();
 
     dbgprintf("[DEBUG] %s: Exiting function\n", __func__);
 }
@@ -899,7 +899,8 @@ void RaftServer::ExecuteCommands(int start, int end)
     dbgprintf("[DEBUG] %s: Entering function\n", __func__);
     for(int i = start; i <= end; i++)
     {   
-        leveldb::Status status = g_levelDBWrapper->Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
+        // TODO: Uncomment
+        // leveldb::Status status = g_levelDBWrapper->Put(g_stateHelper.GetKeyAtIndex(i), g_stateHelper.GetValueAtIndex(i));
         // TODO: check failure
         g_stateHelper.SetLastAppliedIndex(i); 
     }
