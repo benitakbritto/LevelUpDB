@@ -18,7 +18,7 @@ Source code : `src/client/*`
 Automates our test cases for `Get()` and `Put()`. 
 Source code: `test/`
 1. `read.cc`: Tests `Get()`
-2. `write.cc`: Tests `Put`
+2. `write.cc`: Tests `Put()`
 3. `run_read_script.sh`: Runs the tests for `Get()`
 4. `run_write_script.sh`: Runs the tests for `Put()`
 
