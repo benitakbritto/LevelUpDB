@@ -98,6 +98,6 @@ Results will be redirected to /results
 Note: The `run_read_test` and `run_write_test` assume that the loadbalancer kv ip is `0.0.0.0:50051`.
 
 ## Deliverables
-1. Presentation [here] (https://uwprod-my.sharepoint.com/:p:/g/personal/bbritto_wisc_edu/EYl_rcnRnodAlgncz1v7rEoBUMUmoI-uvaQy9J87yX4h6g?e=pECxqO)
-2. Demos [here] (https://drive.google.com/drive/folders/14HGs8kPEDF6nVxDD0LJdAZ9ipBM-Y0nk?usp=sharing)
-3. Report [here] (https://docs.google.com/document/d/1XYwwFvuJtgp1EpDObnG--ibQ3sdL7XUStoMfCV0jiUY/edit?usp=sharing)
+1. Presentation [here](https://uwprod-my.sharepoint.com/:p:/g/personal/bbritto_wisc_edu/EYl_rcnRnodAlgncz1v7rEoBUMUmoI-uvaQy9J87yX4h6g?e=pECxqO)
+2. Demos [here](https://drive.google.com/drive/folders/14HGs8kPEDF6nVxDD0LJdAZ9ipBM-Y0nk?usp=sharing)
+3. Report [here](https://docs.google.com/document/d/1XYwwFvuJtgp1EpDObnG--ibQ3sdL7XUStoMfCV0jiUY/edit?usp=sharing)
