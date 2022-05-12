@@ -1,5 +1,3 @@
-// TODO: Test code thoroughly
-
 /******************************************************************************
  * @usage: ./write <kv lb ip> 
  *                -k <key> 
@@ -7,16 +5,17 @@
  *                -t <testCase> 
  *                -s <value size in bytes> 
  *                -w <number of workers>
- * where TODO
- *  
- *  
+ * where 
+ *          k: key
+ *          i: number of iterations
+ *          t: test case (0: Single Write, 1: Concurrent Write on Same Key, 2: Concurrent Write on Different Keys)
+ *          s: size of the value in bytes
+ *          w: number of worker threads
  * 
- *  
- *  
- * 
- *  @prereq: Things to do before running this test TODO
- * 
- *  
+ *  @prereq: Things to do before running this test 
+ *          clear the storage
+ *          double check all macros
+ *          build src/ and test/
  *****************************************************************************/
 
 #include <iostream>

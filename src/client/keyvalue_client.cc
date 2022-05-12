@@ -1,3 +1,4 @@
+// Note: Tester code (Use test/ instead)
 #include "client.h"
 #include <iostream>
 #include <stdlib.h>

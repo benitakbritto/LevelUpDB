@@ -1,5 +1,3 @@
-// TODO: Test code thoroughly
-
 /******************************************************************************
  * @usage: ./read <kv lb ip> 
  *                -k <key> 
@@ -7,17 +5,19 @@
  *                -t <testCase> 
  *                -l <consistency level> 
  *                -q <quorum size (only for eventual consistency)>
- *                -w <number of workers
- * where TODO
- *  
- *  
- * 
- *  
- *  
- * 
- *  @prereq: Things to do before running this test TODO
- * 
- *  
+ *                -w <number of workers>
+ * where 
+ *          k: key
+ *          i: number of iterations
+ *          t: test case (0: Single Read, 1: Concurrent Read on Same Key, 2: Concurrent Read on Different Keys)
+ *          l: consistency level (0: Strong, 1: Eventual)
+ *          q: size of quorum for eventual consistency
+ *          w: number of worker threads
+ *
+ *  @prereq: Things to do before running this test 
+ *          clear the storage
+ *          double check all macros
+ *          build src/ and test/
  *****************************************************************************/
 
 #include <iostream>
@@ -65,7 +65,7 @@ void printTime(nanoseconds elapsed_time);
 void testSingleRead(string key, int consistencyLevel, int quorumSize, int iterations);
 void testConcurrentReadOnSameKey(string key, int consistencyLevel, int quorumSize, int iterations, int numOfWorkers);
 void testConcurrentReadOnDifferentKey(string startKey, int consistencyLevel, int quorumSize, int iterations, int numOfWorkers);
-void putKeyIfNotExists(string key);
+void putKey(string key);
 string generateValue();
 
 /******************************************************************************
@@ -148,7 +148,7 @@ void printTime(nanoseconds elapsed_time)
 
 void testSingleRead(string key, int consistencyLevel, int quorumSize, int iterations)
 {
-    putKeyIfNotExists(key);
+    putKey(key);
 
     GetRequest getRequest;
     GetReply getReply;
@@ -180,7 +180,7 @@ void testSingleRead(string key, int consistencyLevel, int quorumSize, int iterat
 void testConcurrentReadOnSameKey(string key, int consistencyLevel, int quorumSize, int iterations, int numOfWorkers)
 {
     future<void> workers[numOfWorkers];
-    putKeyIfNotExists(key);
+    putKey(key);
 
     for (int i = 0; i < numOfWorkers; i++) 
     {
@@ -201,7 +201,7 @@ void testConcurrentReadOnDifferentKey(string startKey, int consistencyLevel, int
     for (int i = 0; i < numOfWorkers; i++) 
     {
         key = startKey + to_string(i);
-        putKeyIfNotExists(key);
+        putKey(key);
         workers[i] = async(testSingleRead, key, consistencyLevel, quorumSize, iterations); 
     }
 
@@ -212,32 +212,19 @@ void testConcurrentReadOnDifferentKey(string startKey, int consistencyLevel, int
 }
 
 // For safety
-void putKeyIfNotExists(string key)
+void putKey(string key)
 {
-    GetRequest getRequest;
-    GetReply getReply;
-    Status getStatus;
+    PutRequest putRequest;
+    PutReply putReply;
 
-    getRequest.set_key(key);
-    getRequest.set_consistency_level(0);
-    getRequest.set_quorum(0);
+    putRequest.set_key(key);
+    putRequest.set_value(generateValue());
 
-    getStatus = keyValueClient->GetFromDB(getRequest, &getReply);
-    // TODO: Check what is being returned if key does not exist
-    if (getStatus.error_code() != 0)
+    Status putStatus = keyValueClient->PutToDB(putRequest, &putReply);
+    if (putStatus.error_code() != 0)
     {
-        PutRequest putRequest;
-        PutReply putReply;
-
-        putRequest.set_key(key);
-        putRequest.set_value(generateValue());
-
-        Status putStatus = keyValueClient->PutToDB(putRequest, &putReply);
-        if (putStatus.error_code() != 0)
-        {
-            cout << "[ERROR] Put failed. Exiting program." << endl;
-            exit(-1);
-        }
+        cout << "[ERROR] Put failed. Exiting program." << endl;
+        exit(-1);
     }
 }
 
