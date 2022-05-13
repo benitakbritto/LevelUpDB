@@ -22,6 +22,7 @@
 #include "replicated_log_persistent.h"
 #include "replicated_log_volatile.h"
 #include "state_volatile.h"
+#include "locks.h"
 
 /******************************************************************************
  * GLOBALS
@@ -51,6 +52,7 @@ typedef ReplicatedLogEntry Entry;
 class StateHelper
 {
 private:
+    MutexMap* mutexMap;
     PersistentTermVote pTermVoteObj;
     VolatileTermVote vTermVoteObj;
     PersistentReplicatedLog pReplicatedLogObj;

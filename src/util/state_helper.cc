@@ -8,12 +8,13 @@ StateHelper::StateHelper()
 
 StateHelper::StateHelper(string ip)
 {
+    mutexMap = new MutexMap();
     pTermVoteObj = *(new PersistentTermVote(ip));
     pReplicatedLogObj = *(new PersistentReplicatedLog(ip));
     Init();
 }
 
-/*
+/**
 *   @brief Get the current term from mem
 */
 int StateHelper::GetCurrentTerm()
@@ -21,7 +22,7 @@ int StateHelper::GetCurrentTerm()
     return vTermVoteObj.GetCurrentTerm();
 }
 
-/*
+/**
 *   @brief Add node ip vote for current term in mem and persistent
 *
 *   @param term 
@@ -29,14 +30,19 @@ int StateHelper::GetCurrentTerm()
 */
 void StateHelper::AddVotedFor(int term, string ip)
 {
+    unique_lock<shared_mutex> writeLock = mutexMap->GetWriteLock("log");
+    
     if (!vTermVoteObj.HasVoted(term))
     {
         pTermVoteObj.AddVotedFor(term, ip);
         vTermVoteObj.AddVotedFor(term, ip);
     }
+
+    mutexMap->ReleaseWriteLock(writeLock);
+
 }
 
-/*
+/**
 *   @brief Get voted node ip for specified term
 *
 *   @param term 
@@ -44,21 +50,31 @@ void StateHelper::AddVotedFor(int term, string ip)
 */
 string StateHelper::GetVotedFor(int term)
 {
-    return vTermVoteObj.GetVotedFor(term);
+    shared_lock<shared_mutex> readLock = mutexMap->GetReadLock("term");
+
+    string votedForTerm = vTermVoteObj.GetVotedFor(term);
+
+    mutexMap->ReleaseReadLock(readLock);
+
+    return votedForTerm;
 }
 
-/*
+/**
 *   @brief Update current term in mem and persist
 *
 *   @param term 
 */
 void StateHelper::AddCurrentTerm(int term)
 {
+    unique_lock<shared_mutex> writeLock = mutexMap->GetWriteLock("term");
+
     vTermVoteObj.UpdateCurrentTerm(term);
     pTermVoteObj.AddTerm(term);
+
+    mutexMap->ReleaseWriteLock(writeLock);
 }
 
-/*
+/**
 *   @brief Add log entry to the end
 *
 *   @param term
@@ -70,14 +86,18 @@ void StateHelper::Append(int term, string key, string value)
     dbgprintf("[DEBUG]: Append - Entering function\n");
     int offset = 0;
 
+    unique_lock<shared_mutex> writeLock = mutexMap->GetWriteLock("log");
+
     offset = pReplicatedLogObj.GetEndOfFileOffset();
     pReplicatedLogObj.Append(term, key, value, offset);
     vReplicatedLogObj.Append(term, key, value, offset);
 
+    mutexMap->ReleaseWriteLock(writeLock);
+    
     dbgprintf("[DEBUG]: Append - Exiting function\n");
 }
 
-/*
+/**
 *   @brief Add log entry(ies) from the specified index
 *
 *   @param start index
@@ -87,6 +107,7 @@ void StateHelper::Append(int term, string key, string value)
 void StateHelper::Insert(int start_index, vector<Entry> &entries)
 {
     dbgprintf("[DEBUG]: Insert - Entering function\n");
+
     int offset = 0;
     int index = 0;
 
@@ -103,6 +124,9 @@ void StateHelper::Insert(int start_index, vector<Entry> &entries)
         }
         return;
     }
+
+    unique_lock<shared_mutex> writeLock = mutexMap->GetWriteLock("log");
+
     offset = vReplicatedLogObj.GetOffset(start_index);
     dbgprintf("[DEBUG] %s: offset = %d\n", __func__, offset);
     
@@ -131,18 +155,26 @@ void StateHelper::Insert(int start_index, vector<Entry> &entries)
         index += 1;
     }
 
+    mutexMap->ReleaseWriteLock(writeLock);
+
     dbgprintf("[DEBUG]: Insert - Exiting function\n");
 }
 
-/*
+/**
 *   @brief Get the number of total entries in the log
 */
 int StateHelper::GetLogLength()
 {
-    return vReplicatedLogObj.GetLength();
+    shared_lock<shared_mutex> readLock = mutexMap->GetReadLock("log");
+
+    int logLength = vReplicatedLogObj.GetLength();
+
+    mutexMap->ReleaseReadLock(readLock);
+
+    return logLength;
 }
 
-/*
+/**
 *   @brief Get the term number at the specified index
 *
 *   @param index
@@ -152,7 +184,7 @@ int StateHelper::GetTermAtIndex(int index)
     return vReplicatedLogObj.GetTerm(index);
 }
 
-/*
+/**
 *   @brief Get the key of the command at the specified index
 *
 *   @param index
@@ -162,7 +194,7 @@ string StateHelper::GetKeyAtIndex(int index)
     return vReplicatedLogObj.GetKey(index);
 }
 
-/*
+/**
 *   @brief Get the value of the command at the specified index
 *
 *   @param index
@@ -172,7 +204,7 @@ string StateHelper::GetValueAtIndex(int index)
     return vReplicatedLogObj.GetValue(index);
 }
 
-/*
+/**
 *   @brief Parse logs
 */
 void StateHelper::Init()
@@ -206,7 +238,7 @@ void StateHelper::Init()
     }   
 }
 
-/*
+/**
 *   @brief Update commit index in mem
 *
 *   @param index 
@@ -217,7 +249,7 @@ void StateHelper::SetCommitIndex(int index)
 }
 
 
-/* 
+/**
 *   @brief Retrieve commit index from mem
 *
 *   @return commit index 
@@ -227,7 +259,7 @@ int StateHelper::GetCommitIndex()
     return vStateObj.GetCommitIndex();
 }
 
-/*
+/**
 *   @brief Update index of latest executed command in mem
 *
 *   @param index 
@@ -237,7 +269,7 @@ void StateHelper::SetLastAppliedIndex(int index)
     vStateObj.SetLastAppliedIndex(index);
 }
 
-/*
+/**
 *   @brief Get index of latest executed command from mem
 *
 *   @return index 
@@ -247,7 +279,7 @@ int StateHelper::GetLastAppliedIndex()
     return vStateObj.GetLastAppliedIndex();
 }
 
-/*
+/**
 *   @brief Set identity of server to Leader/Follower/Candidate in mem
 *           Note: Use the ServerIdentity enum in common.h
 *
@@ -265,7 +297,7 @@ void StateHelper::SetIdentity(int identity)
     vStateObj.SetIdentity(identity);
 }
 
-/*
+/**
 *   @brief Get identity of server from mem
 */
 int StateHelper::GetIdentity()
@@ -273,7 +305,7 @@ int StateHelper::GetIdentity()
     return vStateObj.GetIdentity();
 }
 
-/*
+/**
 *   @brief Set next index (value) of particular serverId in mem
 *
 *   @param serverId 
@@ -284,7 +316,7 @@ void StateHelper::SetNextIndex(string serverId, int value)
     vStateObj.SetNextIndex(serverId, value);
 }
 
-/*
+/**
 *   @brief Get next index (value) of particular serverId from mem
 *
 *   @param serverId 
@@ -296,7 +328,7 @@ int StateHelper::GetNextIndex(string serverId)
     return vStateObj.GetNextIndex(serverId);
 }
 
-/*
+/**
 *   @brief Set match index (value) of particular serverId in mem
 *
 *   @param serverId 
@@ -307,7 +339,7 @@ void StateHelper::SetMatchIndex(string serverId, int value)
     vStateObj.SetMatchIndex(serverId, value);
 }
 
-/*
+/**
 *   @brief Get next index (value) of particular serverId from mem
 *
 *   @param serverId 
